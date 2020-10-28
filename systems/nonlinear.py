@@ -2,22 +2,22 @@ import numpy as np
 from numba import njit, guvectorize
 import sympy as sy
 
-from sample import mvn
+from systems import mvn
 
 class DiscreteNonlinearSystem:
     def __init__(self, f, h, R, Q):
         self.n = len(R)
         self.m = len(Q)
+        self.R = R
+        self.Q = Q
 
         # convert sympy functions into jitted functions
         # we use sympy so it can be used with EKF/Jacobians later
         var = [f"x{i}" for i in range(self.n)]
         self.f_sym = f
-        self.f = njit( sy.lambdify([var], f, modules='math') )
+        self.f = njit( sy.lambdify([var], f, 'numpy') )
         self.h_sym = h
-        self.h = njit( sy.lambdify([var], h, modules='math') )
-        self.R = R
-        self.Q = Q
+        self.h = njit( sy.lambdify([var], h, 'numpy') )
 
         # setup the parrallelized datagen function
         self.setup_data_gen()

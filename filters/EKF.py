@@ -12,11 +12,11 @@ class ExtendKalmanFilter(BayesianFilter):
         self.mus = [mu]
         self.sigmas = [sigma]
 
-        var = [f"x{i}" for i in range(self.sys.n)]
-        self.F_sym = sy.Matrix(sys.f_sym.tolist()).jacobian(var)
-        self.F = njit( sy.lambdify([var], self.F_sym, "numpy")  )
-        self.H_sym = sy.Matrix(sys.h_sym.tolist()).jacobian(var)
-        self.H = njit( sy.lambdify([var], self.H_sym, "numpy") )
+        self.F_sym = sy.Matrix(sys.f_sym.tolist()).jacobian(self.sys.x_var)
+        self.F = ( sy.lambdify([self.sys.x_var, self.sys.u_var], self.F_sym, "numpy")  )
+
+        self.H_sym = sy.Matrix(sys.h_sym.tolist()).jacobian(self.sys.x_var)
+        self.H = ( sy.lambdify([self.sys.x_var], self.H_sym, "numpy") )
 
     @property
     def mu(self):
@@ -27,9 +27,9 @@ class ExtendKalmanFilter(BayesianFilter):
         return self.sigmas[-1]
 
     def update(self, u):
-        F = self.F(self.mu)
         #get mubar and sigmabar
-        mu_bar = np.array(self.sys.f(self.mu))
+        mu_bar = np.array(self.sys.f(self.mu, u))
+        F = self.F(mu_bar, u)
         sigma_bar = F@self.sigma@F.T + self.sys.R
 
         #save for use later
@@ -48,10 +48,10 @@ class ExtendKalmanFilter(BayesianFilter):
 
         return self.mu, self.sigma
 
-    def iterate(self, zs):
+    def iterate(self, us, zs):
         """given a sequence of observation, iterate through EKF"""
-        for z in zs:
-            self.update(0)
+        for u, z in zip(us, zs):
+            self.update(u)
             self.predict(z)
 
         return np.array(self.mus), np.array(self.sigmas)

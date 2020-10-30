@@ -54,4 +54,4 @@ class ExtendKalmanFilter(BayesianFilter):
             self.update(u)
             self.predict(z)
 
-        return np.array(self.mus), np.array(self.sigmas)
+        return np.array(self.mus)[1:], np.array(self.sigmas)[1:]

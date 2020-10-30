@@ -137,7 +137,7 @@ class DiscreteNonlinearSystem:
                 x = np.zeros((x0.shape[0], t, self.n))
                 z = np.zeros((x0.shape[0], t, self.m))
                 for i, x1 in enumerate(x0):
-                    x[i], z[i] = self._gen_data_single(x1, t, u, noise)
+                    x[i], _, z[i] = self._gen_data_single(x1, t, u, noise)
 
                 return x, u, z
 

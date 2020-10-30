@@ -10,6 +10,8 @@ class DiscreteNonlinearSystem:
         self.m = len(Q)
         self.R = R
         self.Q = Q
+        self.sqrtR = np.linalg.cholesky(self.R)
+        self.sqrtQ = np.linalg.cholesky(self.Q)
 
         # convert sympy functions into jitted functions
         # we use sympy so it can be used with EKF/Jacobians later
@@ -38,17 +40,20 @@ class DiscreteNonlinearSystem:
         # setup the parrallelized datagen function
         self.parallel = setup_parallel
         if setup_parallel:
-            self.f = njit(self.f)
-            self.h = njit(self.h)
             self.setup_parallel()
 
     def setup_parallel(self):
+        #jit our functions
+        self.f = njit(self.f)
+        self.h = njit(self.h)
+
+        #make variables local and available
         f = self.f
         h = self.h
         n = self.n
         m = self.m
-        L = np.linalg.cholesky(self.R)
-        P = np.linalg.cholesky(self.Q)
+        sqrtR = self.sqrtR
+        sqrtQ = self.sqrtQ
 
         @guvectorize(["f8[:], i8[:], f8[:,:], i8[:], boolean, f8[:,:], f8[:,:]"], 
                             "(n),(t),(t,k),(m),() -> (t,n),(t,m)", 
@@ -56,8 +61,8 @@ class DiscreteNonlinearSystem:
         def gen_data_parallel(x0, t, u, m_array, noise, x, z):
             #get first iteration in
             if noise:
-                x[0] = np.array(f(x0, u[0])) + mvn(mean=np.zeros(n), sqrtcov=L)
-                z[0] = np.array(h(x[0])) + mvn(mean=np.zeros(m), sqrtcov=P)
+                x[0] = np.array(f(x0, u[0])) + mvn(mean=np.zeros(n), sqrtcov=sqrtR)
+                z[0] = np.array(h(x[0])) + mvn(mean=np.zeros(m), sqrtcov=sqrtQ)
             else:
                 x[0] = np.array(f(x0, u[0]))
                 z[0] = np.array(h(x[0]))
@@ -66,8 +71,8 @@ class DiscreteNonlinearSystem:
                 if i == 0:
                     continue
                 if noise:
-                    x[i] = np.array(f(x[i-1], u[i])) + mvn(mean=np.zeros(n), sqrtcov=L)
-                    z[i] = np.array(h(x[i])) + mvn(mean=np.zeros(m), sqrtcov=P)
+                    x[i] = np.array(f(x[i-1], u[i])) + mvn(mean=np.zeros(n), sqrtcov=sqrtR)
+                    z[i] = np.array(h(x[i])) + mvn(mean=np.zeros(m), sqrtcov=sqrtQ)
                 else:
                     x[i] = np.array(f(x[i-1], u[i]))
                     z[i] = np.array(h(x[i]))
@@ -75,14 +80,14 @@ class DiscreteNonlinearSystem:
 
         self._gen_data_parallel = gen_data_parallel
 
-    def _gen_data_single(self, x0, t, u, L, P, noise=True):
+    def _gen_data_single(self, x0, t, u, noise=True):
         x = np.zeros((t, self.n))
         z = np.zeros((t, self.m))
 
         #get first iteration done
         if noise:
-            x[0] = np.array(self.f(x0, u[0])) + mvn(mean=np.zeros(self.n), sqrtcov=L)
-            z[0] = np.array(self.h(x[0])) + mvn(mean=np.zeros(self.m), sqrtcov=P)
+            x[0] = np.array(self.f(x0, u[0])) + mvn(mean=np.zeros(self.n), sqrtcov=self.sqrtR)
+            z[0] = np.array(self.h(x[0])) + mvn(mean=np.zeros(self.m), sqrtcov=self.sqrtQ)
         else:
             x[0] = np.array(self.f(x0, u[0]))
             z[0] = np.array(self.h(x[0]))
@@ -90,15 +95,12 @@ class DiscreteNonlinearSystem:
         #run the rest of them
         for i in range(1,t):
             if noise:
-                x[i] = np.array(self.f(x[i-1], u[i-1])) + mvn(mean=np.zeros(self.n), sqrtcov=L)
-                z[i] = np.array(self.h(x[i])) + mvn(mean=np.zeros(self.m), sqrtcov=P)
+                x[i] = np.array(self.f(x[i-1], u[i-1])) + mvn(mean=np.zeros(self.n), sqrtcov=self.sqrtR)
+                z[i] = np.array(self.h(x[i])) + mvn(mean=np.zeros(self.m), sqrtcov=self.sqrtQ)
             else:
                 x[i] = np.array(self.f(x[i-1], u[i-1]))
                 z[i] = np.array(self.h(x[i]))
         return x, u, z
-
-        
-
 
     def gen_data(self, x0, t, u=None, noise=True):
         """Wrapper to call parallelized version a little more intuitively
@@ -130,20 +132,17 @@ class DiscreteNonlinearSystem:
             x, z = self._gen_data_parallel(x0, np.arange(t), u, np.arange(self.m), noise)
             return x, u, z
         else:
-            L = np.linalg.cholesky(self.R)
-            P = np.linalg.cholesky(self.Q)
-
             #determine if we need to loop over multiple starting conditions
             if len(x0.shape) > 1:
                 x = np.zeros((x0.shape[0], t, self.n))
                 z = np.zeros((x0.shape[0], t, self.m))
                 for i, x1 in enumerate(x0):
-                    x[i], z[i] = self._gen_data_single(x1, t, u, L, P, noise)
+                    x[i], z[i] = self._gen_data_single(x1, t, u, noise)
 
                 return x, u, z
 
             else:
-                return self._gen_data_single(x0, t, u, L, P, noise)
+                return self._gen_data_single(x0, t, u, noise)
 
 
 if __name__ == "__main__":

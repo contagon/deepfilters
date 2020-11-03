@@ -30,7 +30,7 @@ class ExtendKalmanFilter(BayesianFilter):
         #get mubar and sigmabar
         mu_bar = np.array(self.sys.f(self.mu, u))
         F = self.F(mu_bar, u)
-        sigma_bar = F@self.sigma@F.T + self.sys.R
+        sigma_bar = F@self.sigma@F.T + self.sys.cov_x
 
         #save for use later
         self.mus.append( mu_bar )
@@ -42,7 +42,7 @@ class ExtendKalmanFilter(BayesianFilter):
         H = self.H(self.mu)
         zbar = self.sys.h(self.mu)
         #update
-        K = self.sigma@H.T@inv( H@self.sigma@H.T + self.sys.Q )
+        K = self.sigma@H.T@inv( H@self.sigma@H.T + self.sys.cov_z )
         self.mus[-1] = self.mu + K@(z - zbar)
         self.sigmas[-1] = (np.eye(self.sys.n) - K@H)@self.sigma
 

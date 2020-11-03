@@ -27,18 +27,18 @@ class ParticleFilter(BayesianFilter):
 
         #set up p(z|x) so it's parallelize and super fast
         h = self.sys.h
-        invQ = inv(self.sys.Q)
-        norm = (2*np.pi)**(-self.sys.m/2) / np.sqrt(det(self.sys.Q))
+        invcov_z = inv(self.sys.cov_z)
+        norm = (2*np.pi)**(-self.sys.m/2) / np.sqrt(det(self.sys.cov_z))
 
         @guvectorize(["f8[:], f8[:], f8[:]"], "(m),(n)->()", nopython=True, target='parallel')
         def pz_x(z, x, out):
             diff = np.array(h(x)) - z
-            out[0] = norm * np.exp( -diff.T@invQ@diff/2 )
+            out[0] = norm * np.exp( -diff.T@invcov_z@diff/2 )
         
         self.pz_x = pz_x
 
     def update(self, u):
-        self.particles, _, _ = self.sys.gen_data(self.particles, 1, u)
+        self.particles, _, _ = self.sys.gen_data(self.particles, 1, u, True, True, False)
         #squeeze to take out t dimension
         self.particles = self.particles.squeeze()
 

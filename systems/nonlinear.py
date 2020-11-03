@@ -61,9 +61,9 @@ class DiscreteNonlinearSystem:
         n = self.n
         m = self.m
         k = self.k
-        sqrtcov_x = self.sqrtcov_x if 'sqrtcov_x' in globals() else np.zeros((self.n, self.n))
-        sqrtcov_z = self.sqrtcov_z if 'sqrtcov_z' in globals() else np.zeros((self.m, self.m))
-        sqrtcov_u = self.sqrtcov_u if 'sqrtcov_u' in globals() else np.zeros((self.k, self.k))
+        sqrtcov_x = self.sqrtcov_x if hasattr(self, "sqrtcov_x") else np.zeros((self.n, self.n))
+        sqrtcov_z = self.sqrtcov_z if hasattr(self, "sqrtcov_z") else np.zeros((self.m, self.m))
+        sqrtcov_u = self.sqrtcov_u if hasattr(self, "sqrtcov_u") else np.zeros((self.k, self.k))
 
         @guvectorize(["f8[:], i8[:], f8[:,:], i8[:], boolean, boolean, boolean, f8[:,:], f8[:,:], f8[:,:]"], 
                             "(n),(t),(t,k),(m),(),(),() -> (t,n),(t,k),(t,m)", 

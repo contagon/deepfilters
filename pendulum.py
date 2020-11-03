@@ -20,7 +20,7 @@ h = sy.Array([x_0])
 
 cov_x = np.array([[.01, 0],
                 [0, .001]])
-cov_z = np.array([[.001]])
+cov_z = np.array([[.1]])
 cov_u = np.array([[.01]])
 
 ############   make system and gather data     ##################
@@ -67,7 +67,7 @@ def run_pf(n=100, plot=False):
     all_particles = np.array(all_particles)
 
     if plot:
-        # plt.plot(t, all_particles.mean(axis=1).T[0], label="PF Filtered Data")
+        plt.plot(t, all_particles.mean(axis=1).T[0], label="PF Filtered Data")
         for h, particles in zip(t, all_particles):
             plt.scatter(np.ones_like(particles.T[0])*h, particles.T[0], c='r', alpha=0.1, s=1)
 
@@ -75,7 +75,7 @@ def run_pf(n=100, plot=False):
 ############            plot             ##################
 
 t = np.arange(t)*dt
-# plt.plot(t, x_perf.T[0], label="Noiseless Data")
+plt.plot(t, x_perf.T[0], label="Noiseless Data")
 plt.plot(t, x.T[0], label="OG Data")
 # plt.plot(t, z, label="Measurement Data", alpha=0.3)
 # run_ekf(plot=True)

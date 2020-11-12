@@ -9,7 +9,7 @@ from filters import ExtendKalmanFilter, ParticleFilter, UnscentedKalmanFilter
 
 from scipy.stats import norm
 from time import time
-
+start = time()
 ############   setup simple pendulum as test     ##################
 dt = .1
 b = 1
@@ -62,8 +62,8 @@ def run_pf(n=100, plot=False):
     pf = ParticleFilter(sys, N=n, sample='normal', mean=x0, cov=sigma)
     all_particles = []
     for us, zs in zip(u, z):
-        pf.update(us)
-        all_particles.append( pf.predict(zs) )
+        pf.predict(us)
+        all_particles.append( pf.update(zs) )
     all_particles = np.array(all_particles)
 
     if plot:
@@ -81,6 +81,7 @@ plt.plot(t, x.T[0], label="OG Data")
 # run_ekf(plot=True)
 # run_ukf(plot=True)
 run_pf(1000, plot=True)
+print(time()- start)
 plt.legend()
 plt.show()
 

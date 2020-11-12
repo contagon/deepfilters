@@ -34,7 +34,7 @@ class UnscentedKalmanFilter(BayesianFilter):
     def sigma(self):
         return self.sigmas[-1]
 
-    def update(self, u):
+    def predict(self, u):
         #get mubar and sigmabar
         sqrtSigma = np.linalg.cholesky(self.sigma)
         X = np.vstack((self.mu, self.mu+self.gamma*sqrtSigma.T, self.mu-self.gamma*sqrtSigma.T))
@@ -53,7 +53,7 @@ class UnscentedKalmanFilter(BayesianFilter):
 
         return mu_bar, sigma_bar
 
-    def predict(self, z):
+    def update(self, z):
         sqrtSigma = np.linalg.cholesky(self.sigma)
         Xbar = np.vstack((self.mu, self.mu+self.gamma*sqrtSigma.T, self.mu-self.gamma*sqrtSigma.T))
         Zbar = np.zeros((2*self.sys.n+1, self.sys.m))
@@ -75,7 +75,7 @@ class UnscentedKalmanFilter(BayesianFilter):
     def iterate(self, us, zs):
         """given a sequence of observation, iterate through EKF"""
         for u, z in zip(us, zs):
-            self.update(u)
-            self.predict(z)
+            self.predict(u)
+            self.update(z)
 
         return np.array(self.mus)[1:], np.array(self.sigmas)[1:]

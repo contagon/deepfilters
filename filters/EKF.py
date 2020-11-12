@@ -15,8 +15,14 @@ class ExtendKalmanFilter(BayesianFilter):
         self.F_sym = sy.Matrix(sys.f_sym.tolist()).jacobian(self.sys.x_var)
         self.F = ( sy.lambdify([self.sys.x_var, self.sys.u_var], self.F_sym, "numpy")  )
 
+        self.V_sym = sy.Matrix(sys.f_sym.tolist()).jacobian(self.sys.u_var)
+        self.V = ( sy.lambdify([self.sys.x_var, self.sys.u_var], self.F_sym, "numpy")  )
+
         self.H_sym = sy.Matrix(sys.h_sym.tolist()).jacobian(self.sys.x_var)
-        self.H = ( sy.lambdify([self.sys.x_var], self.H_sym, "numpy") )
+        if hasattr(sys, "l_var"):
+            self.H = ( sy.lambdify([self.sys.x_var, self.sys.l_var], self.H_sym, "numpy") )
+        else:
+            self.H = ( sy.lambdify([self.sys.x_var], self.H_sym, "numpy") )
 
     @property
     def mu(self):
@@ -26,11 +32,12 @@ class ExtendKalmanFilter(BayesianFilter):
     def sigma(self):
         return self.sigmas[-1]
 
-    def update(self, u):
+    def predict(self, u):
         #get mubar and sigmabar
         mu_bar = np.array(self.sys.f(self.mu, u))
         F = self.F(mu_bar, u)
-        sigma_bar = F@self.sigma@F.T + self.sys.cov_x
+        V = self.V(mu_bar, u)
+        sigma_bar = F@self.sigma@F.T + V@self.sys.cov_x(u)@V.T
 
         #save for use later
         self.mus.append( mu_bar )
@@ -38,9 +45,9 @@ class ExtendKalmanFilter(BayesianFilter):
 
         return mu_bar, sigma_bar
 
-    def predict(self, z):
-        H = self.H(self.mu)
-        zbar = self.sys.h(self.mu)
+    def update(self, z, *args):
+        H = self.H(self.mu, *args)
+        zbar = self.sys.h(self.mu, *args)
         #update
         K = self.sigma@H.T@inv( H@self.sigma@H.T + self.sys.cov_z )
         self.mus[-1] = self.mu + K@(z - zbar)
@@ -51,7 +58,7 @@ class ExtendKalmanFilter(BayesianFilter):
     def iterate(self, us, zs):
         """given a sequence of observation, iterate through EKF"""
         for u, z in zip(us, zs):
-            self.update(u)
-            self.predict(z)
+            self.predict(u)
+            self.update(z)
 
         return np.array(self.mus)[1:], np.array(self.sigmas)[1:]

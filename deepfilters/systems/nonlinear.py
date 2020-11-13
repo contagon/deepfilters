@@ -2,7 +2,7 @@ import numpy as np
 from numba import njit, guvectorize
 import sympy as sy
 
-from systems import mvn
+from .sample import mvn
 
 class DiscreteNonlinearSystem:
     def __init__(self, f, h, cov_x=None, cov_z=None, cov_u=None, x_var=None, u_var=None, setup_parallel=False):

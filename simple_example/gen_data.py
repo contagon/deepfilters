@@ -1,5 +1,5 @@
-from filters import ParticleFilter
-from odometry import OdometrySystem
+from deepfilters.filters import ParticleFilter
+from deepfilters.systems import OdometrySystem
 
 import numpy as np
 from scipy.io import loadmat

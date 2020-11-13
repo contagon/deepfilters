@@ -1,11 +1,9 @@
-from filters import ParticleFilter
-from filters import ExtendKalmanFilter
 import sympy as sy
 import numpy as np
 from numpy.linalg import inv, det, cholesky
 
 from numba import njit, guvectorize
-from systems import mvn
+from .sample import mvn
 
 class OdometrySystem:
 
@@ -78,9 +76,11 @@ class OdometrySystem:
 if __name__ == "__main__":
     from scipy.io import loadmat
     import matplotlib.pyplot as plt
+    from deepfilters.filters import ParticleFilter
+    from deepfilters.filters import ExtendKalmanFilter
 
     # setup all data
-    data = loadmat("data.mat")['data'][0,34]
+    data = loadmat("data.mat")['data'][0,0]
     xs = data['realRobot'][0,0].T
     us = data['noisefreeControl'][0,0].T
     zs = data['realObservation'][0,0].T
@@ -97,7 +97,7 @@ if __name__ == "__main__":
     sys = OdometrySystem(alphas, beta)
 
     n = 1000
-    pf = ParticleFilter(sys, N=n, mean=xs[0], cov=np.zeros((3,3)), pz_x=sys.pz_x)
+    pf = ParticleFilter(sys, N=n, mean=xs[0], cov=np.ones((3,3))*50, pz_x=sys.pz_x)
     all_particles = []
     for u, z in zip(us, zs):
         pf.predict(u)

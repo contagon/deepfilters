@@ -1,4 +1,4 @@
-from filters import BayesianFilter
+from .base import BayesianFilter
 
 import numpy as np
 from numpy.linalg import inv

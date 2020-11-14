@@ -3,7 +3,7 @@ import numpy as np
 from numpy.linalg import inv, det, cholesky
 
 from numba import njit, guvectorize
-from .sample import mvn
+from sample import mvn
 
 class OdometrySystem:
 
@@ -14,7 +14,7 @@ class OdometrySystem:
         self.u_var = [dr1, dt, dr2]
         self.l_var = [lx, ly]
 
-        self.Q = np.diag(beta**2)
+        self.Q = np.diag(beta)
         self.cov_z = self.Q
         self.sqrtQ = cholesky(self.Q)
         self.alphas = alphas
@@ -80,7 +80,7 @@ if __name__ == "__main__":
     from deepfilters.filters import ExtendKalmanFilter
 
     # setup all data
-    data = loadmat("data.mat")['data'][0,0]
+    data = loadmat("../../simple_example/data.mat")['data'][0,0]
     xs = data['realRobot'][0,0].T
     us = data['noisefreeControl'][0,0].T
     zs = data['realObservation'][0,0].T

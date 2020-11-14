@@ -7,6 +7,7 @@ from torch.utils.data import Dataset, DataLoader, TensorDataset
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm, trange
+from deepfilters.systems import OdometrySystem
 
 class OdometryData:
     def __init__(self, filename, split=8000):
@@ -18,6 +19,7 @@ class OdometryData:
         self.u = torch.tensor( self.data['u'] ).float().cuda()
         self.split = split
         self.total = len(self.p_mu) / 200
+        self.sys = OdometrySystem()
 
     @property
     def rand_train_idx(self):

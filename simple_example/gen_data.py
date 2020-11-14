@@ -22,6 +22,8 @@ l = np.array([[21, 168.3333, 315.6667, 463, 463, 315.6667, 168.3333, 21],
 sys = OdometrySystem(alphas, beta)
 
 # setup places to put things
+start_mu = np.zeros((times*steps, 3))
+start_cov = np.zeros((times*steps, 3, 3))
 p_mu = np.zeros((times*steps, 3))
 p_cov = np.zeros((times*steps, 3, 3))
 u_mu = np.zeros((times*steps,3))
@@ -45,33 +47,37 @@ for i in range(times):
     all_u[steps*i:steps*(i+1)] = xs
 
     n = 1000
-    pf = ParticleFilter(sys, N=n, mean=xs[0], cov=np.zeros((3,3)), pz_x=sys.pz_x)
+    pf = ParticleFilter(sys, N=n, mean=np.array([180, 50, 0]), cov=np.diag([200, 200, np.pi/4]), pz_x=sys.pz_x)
     all_particles = []
 
     for j, (u, z) in enumerate(zip(us, zs)):
-        # start = time()
+        # save where we started at each time step
+        # somewhat redundant, but makes things a bit easier later
+        start_mu[steps*i+j] = pf.particles.mean(axis=0)
+        start_cov[steps*i+j] = np.cov(pf.particles, rowvar=False)
+
+        # predict step and save
         p = pf.predict(u)
-        # print("PREDICT:", time()- start)
         p_mu[steps*i+j]  = p.mean(axis=0)
         p_cov[steps*i+j] = np.cov(p, rowvar=False)
 
+        # clean measurements
         temp = z[ ~np.isnan(z).any(axis=1) ]
         ls = l[ temp[:,2].astype('int')-1 ]
         meas = temp[:,:2]
 
+        # update step and save
         if meas.shape != (0,):
-            # start = time()
             try:
                 p = pf.update(meas, ls)
             except:
                 bad_time.append(i)
                 bad_step.append(j)
-            # print("UPDATE", time()-start)
         u_mu[steps*i+j]  = p.mean(axis=0)
         u_cov[steps*i+j] = np.cov(p, rowvar=False)
 
         bar.update(1)
     
-np.savez("odometry_particle_data.npz", p_mu=p_mu, p_cov=p_cov, u_mu=u_mu, u_cov=u_cov, z=all_z, u=all_u)
+np.savez("odometry_particle_data.npz", p_mu=p_mu, p_cov=p_cov, u_mu=u_mu, u_cov=u_cov, z=all_z, u=all_u, start_mu=start_mu, start_cov=start_cov)
 print(bad_time)
 print(bad_step)

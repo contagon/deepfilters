@@ -80,7 +80,7 @@ if __name__ == "__main__":
     from deepfilters.filters import ExtendKalmanFilter
 
     # setup all data
-    data = loadmat("../../simple_example/data.mat")['data'][0,0]
+    data = loadmat("../../simple_example/data.mat")['data'][0,10]
     xs = data['realRobot'][0,0].T
     us = data['noisefreeControl'][0,0].T
     zs = data['realObservation'][0,0].T
@@ -97,7 +97,7 @@ if __name__ == "__main__":
     sys = OdometrySystem(alphas, beta)
 
     n = 1000
-    pf = ParticleFilter(sys, N=n, mean=xs[0], cov=np.ones((3,3))*50, pz_x=sys.pz_x)
+    pf = ParticleFilter(sys, N=n, mean=np.array([180, 50, 0]), cov=np.diag([200, 200, np.pi/4]), pz_x=sys.pz_x)
     all_particles = []
     for u, z in zip(us, zs):
         pf.predict(u)

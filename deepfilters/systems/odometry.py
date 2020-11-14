@@ -3,7 +3,7 @@ import numpy as np
 from numpy.linalg import inv, det, cholesky
 
 from numba import njit, guvectorize
-from sample import mvn
+from deepfilters.systems.sample import mvn
 
 class OdometrySystem:
 
@@ -21,7 +21,7 @@ class OdometrySystem:
 
         self.f_sym =  sy.Array([x + dt*sy.cos(theta + dr1),
                                 y + dt*sy.sin(theta + dr1),
-                                theta + dr1 + dr1])
+                                theta + dr1 + dr2])
         self.h_sym = sy.Array([sy.sqrt((x - lx)**2 + (y - ly)**2),
                                 sy.atan2(ly-y, lx-x)-theta])
         
@@ -95,6 +95,7 @@ if __name__ == "__main__":
 
     #setup system
     sys = OdometrySystem(alphas, beta)
+    print(us)
 
     n = 1000
     pf = ParticleFilter(sys, N=n, mean=np.array([180, 50, 0]), cov=np.diag([200, 200, np.pi/4]), pz_x=sys.pz_x)
@@ -118,17 +119,16 @@ if __name__ == "__main__":
         plt.scatter(all_particles[:,i,0], all_particles[:,i,1], alpha=0.3, s=1, c='r')
 
 
-    # ekf = ExtendKalmanFilter(sys, xs[0], np.zeros((3,3)))
+    # ekf = ExtendKalmanFilter(sys, np.array([180, 50, 0]), np.diag([200, 200, np.pi/4]))
     # for u,z in zip(us, zs):
     #     ekf.predict(u)
 
-    #     for z_i in z:
-    #         if np.isnan(z_i).any():
-    #             continue
+    #     temp = z[ ~np.isnan(z).any(axis=1) ]
+    #     ls = l[ temp[:,2].astype('int')-1 ]
+    #     meas = temp[:,:2]
 
-    #         meas = z_i[0:2]
-    #         l_i  = l[ int(z_i[2])-1 ]
-    #         ekf.update(meas, l_i)
+    #     for zi, li in zip(meas, ls):
+    #         ekf.update(zi, li)
 
     # plt.plot(np.array(ekf.mus)[:,0], np.array(ekf.mus)[:,1])
 

@@ -44,7 +44,7 @@ for i in range(times):
 
     all_z[steps*i:steps*(i+1)] = zs
     all_u[steps*i:steps*(i+1)] = us
-    all_u[steps*i:steps*(i+1)] = xs
+    all_x[steps*i:steps*(i+1)] = xs
 
     n = 1000
     pf = ParticleFilter(sys, N=n, mean=np.array([180, 50, 0]), cov=np.diag([200, 200, np.pi/4]), pz_x=sys.pz_x)

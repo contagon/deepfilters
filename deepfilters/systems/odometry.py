@@ -28,6 +28,8 @@ class OdometrySystem:
         self.f = njit( sy.lambdify([self.x_var, self.u_var], self.f_sym, 'math') )
         self.h = njit( sy.lambdify([self.x_var, self.l_var], self.h_sym, 'math') )
 
+        self.f_np = njit( sy.lambdify([self.x_var, self.u_var], self.f_sym, 'numpy') )
+
         self.k = len(self.u_var)
         self.n = len(self.x_var)
         self.m = 2
@@ -80,7 +82,7 @@ if __name__ == "__main__":
     from deepfilters.filters import ExtendKalmanFilter
 
     # setup all data
-    data = loadmat("../../simple_example/data.mat")['data'][0,10]
+    data = loadmat("../../simple_example/data.mat")['data'][0,31]
     xs = data['realRobot'][0,0].T
     us = data['noisefreeControl'][0,0].T
     zs = data['realObservation'][0,0].T
@@ -95,7 +97,6 @@ if __name__ == "__main__":
 
     #setup system
     sys = OdometrySystem(alphas, beta)
-    print(us)
 
     n = 1000
     pf = ParticleFilter(sys, N=n, mean=np.array([180, 50, 0]), cov=np.diag([200, 200, np.pi/4]), pz_x=sys.pz_x)

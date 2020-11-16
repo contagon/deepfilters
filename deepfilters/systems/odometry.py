@@ -29,6 +29,7 @@ class OdometrySystem:
         self.h = njit( sy.lambdify([self.x_var, self.l_var], self.h_sym, 'math') )
 
         self.f_np = njit( sy.lambdify([self.x_var, self.u_var], self.f_sym, 'numpy') )
+        self.h_np = lambda x, l: np.array([ np.sqrt((x[0] - l[0])**2+(x[1] - l[1])**2), np.arctan2(l[1]-x[1], l[0]-x[0])-x[2]])
 
         self.k = len(self.u_var)
         self.n = len(self.x_var)

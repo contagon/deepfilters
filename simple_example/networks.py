@@ -14,7 +14,7 @@ class OdometryData:
         self.data = np.load(filename)
 
         self.split = split
-        self.total = len(self.data['p_mu']) / 200
+        self.total = len(self.data['p_mu']) // 200
         if self.split >= self.total:
             raise ValueError("Split can't be larger than total")
 
@@ -80,14 +80,16 @@ class OdometryData:
 
     def train_update_sigma(self, idx):
         x_train = self.p_cov[idx*200:(idx+1)*200]
+        update_v = self.update_v[idx*200:(idx+1)*200]
         y_train = self.u_cov[idx*200:(idx+1)*200]
-        return x_train, y_train
+        return x_train, update_v, y_train
 
 class Sigma(nn.Module):
     def __init__(self, sigma_size, state_size, hidden_size, n_layers):
         super().__init__()
         self.state_size = state_size
         self.sigma_size = sigma_size
+
         self.input_size = sigma_size**2 + state_size
         self.output_size = sigma_size**2
         self.hidden_size = hidden_size
@@ -105,13 +107,19 @@ class Sigma(nn.Module):
         #do some fancy stuff to make sure it's symmetric in the end
         x = torch.cat( (sigma.view(-1, self.sigma_size**2), state_predict_diff_mu), 1)
         x = self.net( x ).reshape(-1, self.sigma_size, self.sigma_size)
-        return (x + torch.transpose(x, 1, 2)) / 20
+        return (x + torch.transpose(x, 1, 2))
         # return x
+    
 
 class UpdateMu(nn.Module):
-    def __init__(self, input_size, output_size, hidden_size, n_layers):
-        self.input_size = input_size
-        self.output_size = output_size
+    def __init__(self, sigma_size, innovation_size, state_size, hidden_size, n_layers):
+        super().__init__()
+        self.sigma_size = sigma_size
+        self.innovation_size = innovation_size
+        self.state_size = state_size
+
+        self.input_size = sigma_size**2 + innovation_size
+        self.output_size = state_size
         self.hidden_size = hidden_size
 
         layers = [nn.Linear(self.input_size, self.hidden_size),
@@ -123,8 +131,9 @@ class UpdateMu(nn.Module):
         
         self.net = nn.Sequential(*layers)
 
-    def forward(self, x):
+    def forward(self, sigma, innovation):
         #do some fancy stuff to make sure it's symmetric in the end
+        x = torch.cat( (sigma.view(-1, self.sigma_size**2), innovation), 1)
         return  self.net(x)
 
 

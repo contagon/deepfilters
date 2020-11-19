@@ -1,4 +1,4 @@
-from filters import BayesianFilter
+from .base import BayesianFilter
 
 import numpy as np
 from numpy.linalg import inv
@@ -34,17 +34,17 @@ class UnscentedKalmanFilter(BayesianFilter):
     def sigma(self):
         return self.sigmas[-1]
 
-    def update(self, u):
+    def predict(self, u):
         #get mubar and sigmabar
         sqrtSigma = np.linalg.cholesky(self.sigma)
         X = np.vstack((self.mu, self.mu+self.gamma*sqrtSigma.T, self.mu-self.gamma*sqrtSigma.T))
-        Xbar, _, Zbar = self.sys.gen_data(X, 1, u, noise=False)
+        Xbar, _, Zbar = self.sys.gen_data(X, 1, u, noise_x=False, noise_z=False, noise_u=False)
         Xbar = Xbar.squeeze(1)
         Zbar = Zbar.squeeze(1)
         
         mu_bar = Xbar.T@self.wm
         diff = Xbar - mu_bar
-        sigma_bar = np.sum([wc*np.outer(d,d) for wc, d in zip(self.wc, diff)], axis=0) + self.sys.R
+        sigma_bar = np.sum([wc*np.outer(d,d) for wc, d in zip(self.wc, diff)], axis=0) + self.sys.cov_x
 
         #save for use later
         self.mus.append( mu_bar )
@@ -53,7 +53,7 @@ class UnscentedKalmanFilter(BayesianFilter):
 
         return mu_bar, sigma_bar
 
-    def predict(self, z):
+    def update(self, z):
         sqrtSigma = np.linalg.cholesky(self.sigma)
         Xbar = np.vstack((self.mu, self.mu+self.gamma*sqrtSigma.T, self.mu-self.gamma*sqrtSigma.T))
         Zbar = np.zeros((2*self.sys.n+1, self.sys.m))
@@ -63,7 +63,7 @@ class UnscentedKalmanFilter(BayesianFilter):
 
         diffZ = Zbar - z_bar
         diffX = Xbar - self.mu
-        S = np.sum([wc*np.outer(d,d) for wc, d in zip(self.wc, diffZ)], axis=0) + self.sys.Q
+        S = np.sum([wc*np.outer(d,d) for wc, d in zip(self.wc, diffZ)], axis=0) + self.sys.cov_z
         sigma_xz = np.sum([wc*np.outer(c,d) for wc, c, d in zip(self.wc, diffX, diffZ)], axis=0)
 
         K = sigma_xz@inv(S)
@@ -75,7 +75,7 @@ class UnscentedKalmanFilter(BayesianFilter):
     def iterate(self, us, zs):
         """given a sequence of observation, iterate through EKF"""
         for u, z in zip(us, zs):
-            self.update(u)
-            self.predict(z)
+            self.predict(u)
+            self.update(z)
 
         return np.array(self.mus)[1:], np.array(self.sigmas)[1:]

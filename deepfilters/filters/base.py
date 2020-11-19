@@ -3,9 +3,9 @@ from abc import ABC, abstractmethod
 class BayesianFilter(ABC):
 
     @abstractmethod
-    def update(self, u):
+    def predict(self, u):
         pass
 
     @abstractmethod
-    def predict(self, z):
+    def update(self, z):
         pass

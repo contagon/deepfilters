@@ -9,7 +9,7 @@ from filters import ExtendKalmanFilter, ParticleFilter, UnscentedKalmanFilter
 
 from scipy.stats import norm
 from time import time
-
+start = time()
 ############   setup simple pendulum as test     ##################
 dt = .1
 b = 1
@@ -18,20 +18,21 @@ u_0, x_0, x_1 = sy.symbols('u_0 x_0 x_1')
 f = sy.Array([x_0+dt*x_1, -dt*sy.sin(x_0) + (1-dt*b)*x_1 + c*u_0])
 h = sy.Array([x_0])
 
-R = np.array([[.01, 0],
+cov_x = np.array([[.01, 0],
                 [0, .001]])
-Q = np.array([[.1]])
+cov_z = np.array([[.1]])
+cov_u = np.array([[.01]])
 
 ############   make system and gather data     ##################
 t = 500
 x0 = np.array([2,0])
 
-sys = DiscreteNonlinearSystem(f, h, R, Q, setup_parallel=False)
+sys = DiscreteNonlinearSystem(f, h, cov_x, cov_z, cov_u, setup_parallel=False)
 u = lambda t : np.array([np.cos(t/20)/20])
-x, u, z = sys.gen_data(x0, t, u, noise=True)
-x_perf, _, _ = sys.gen_data(x0, t, u, noise=False)
+x, _, z = sys.gen_data(x0, t, u, noise_x=True, noise_z=True, noise_u=False)
+x_perf, u, _ = sys.gen_data(x0, t, u, noise_x=False, noise_z=False, noise_u=False)
 
-############     Run it through the ekf       ##################
+############     cov_xun it through the ekf       ##################
 sigma = np.eye(2)*.1
 def run_ekf(plot=False):
     ekf = ExtendKalmanFilter(sys, x0, sigma)
@@ -44,7 +45,7 @@ def run_ekf(plot=False):
 
     return x_clean
 
-############     Run it through the ukf       ##################
+############     cov_xun it through the ukf       ##################
 def run_ukf(plot=False):
     ukf = UnscentedKalmanFilter(sys, x0, sigma)
     x_clean, sigmas = ukf.iterate(u, z)
@@ -56,13 +57,13 @@ def run_ukf(plot=False):
 
     return x_clean
 
-############     Run it through the pf        ##################
+############     cov_xun it through the pf        ##################
 def run_pf(n=100, plot=False):
-    pf = ParticleFilter(sys, N=100, sample='normal', mean=x0, cov=sigma)
+    pf = ParticleFilter(sys, N=n, sample='normal', mean=x0, cov=sigma)
     all_particles = []
     for us, zs in zip(u, z):
-        pf.update(us)
-        all_particles.append( pf.predict(zs) )
+        pf.predict(us)
+        all_particles.append( pf.update(zs) )
     all_particles = np.array(all_particles)
 
     if plot:
@@ -77,7 +78,10 @@ t = np.arange(t)*dt
 plt.plot(t, x_perf.T[0], label="Noiseless Data")
 plt.plot(t, x.T[0], label="OG Data")
 # plt.plot(t, z, label="Measurement Data", alpha=0.3)
-run_ukf(plot=True)
+# run_ekf(plot=True)
+# run_ukf(plot=True)
+run_pf(1000, plot=True)
+print(time()- start)
 plt.legend()
 plt.show()
 

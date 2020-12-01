@@ -25,23 +25,28 @@ class OdometryData:
                 [0, 0, 0, 0, 292, 292, 292, 292, np.nan]]).T
         self.sys = OdometrySystem(alphas, beta)
 
-        # used for predict_sigma method
+        # used for predict_sigma networks
         self.start_mu = self.data['start_mu']
         self.u = self.data['u']
         self.mubar = np.array( self.sys.f_np(self.start_mu.T, self.u.T) ).T
         self.start_cov = torch.tensor( self.data['start_cov'] ).float().cuda()
         self.predict_diff_mu = torch.tensor( self.mubar - self.start_mu ).float().cuda()
         self.p_cov = torch.tensor( self.data['p_cov'] ).float().cuda()
+        self.start_mu = torch.tensor( self.start_mu ).float().cuda()
+        self.u = torch.tensor(self.u).float().cuda()
 
-        # used for update_mu method
+        # used for update_mu/sigma networks
         self.z = self.data['z']
         self.z[np.isnan(self.z)] = 9
         self.p_mu = self.data['p_mu']
         zbar = []
+        lis = []
         # pass landmarks and x into measurement model
         for i in range(self.z.shape[1]):
             li = l[self.z[:,i,2].astype('int')-1]
+            lis.append( li )
             zbar.append( self.sys.h_np(self.p_mu.T, li.T).T )
+        self.lis = torch.tensor( np.transpose( np.array(lis), (1,0,2)) ).float().cuda()
         self.zbar = np.transpose( np.array(zbar), (1,0,2))
         self.update_v = self.z[:,:,:2] - self.zbar
         # unwrap as needed
@@ -53,6 +58,7 @@ class OdometryData:
         self.update_v = torch.tensor( self.update_v ).float().cuda()
         self.update_diff_mu = torch.tensor( self.data['u_mu'] - self.p_mu ).float().cuda()
         self.u_cov = torch.tensor( self.data['u_cov'] ).float().cuda()
+        self.z = torch.tensor( self.z[:,:,:2] ).float().cuda()
 
     @property
     def rand_train_idx(self):
@@ -79,10 +85,41 @@ class OdometryData:
         return sig_train, update_v, y_train
 
     def train_update_sigma(self, idx):
-        x_train = self.p_cov[idx*200:(idx+1)*200]
+        sig_train = self.p_cov[idx*200:(idx+1)*200].detach()
         update_v = self.update_v[idx*200:(idx+1)*200]
         y_train = self.u_cov[idx*200:(idx+1)*200]
-        return x_train, update_v, y_train
+        return sig_train, update_v, y_train
+
+    def train_all(self, idx):
+        #start with loss at end of full step first...
+        #then we'll get into for each step
+
+        # for predict mu
+        start_mu = self.start_mu[idx*200:(idx+1)*200]
+        u = self.u[idx*200:(idx+1)*200]
+
+        # for predict sigma
+        start_sig = self.start_cov[idx*200:(idx+1)*200]
+
+        # for update mu
+        landmarks = self.lis[idx*200:(idx+1)*200]
+        z = self.z[idx*200:(idx+1)*200]
+        # for update sigma
+
+        return start_mu[:-1], start_sig[:-1], u[:-1], z[:-1], landmarks[:-1], start_mu[1:], start_sig[1:] 
+
+    def f(self, mu, u):
+        x = mu[:,0] + u[:,1]*torch.cos(mu[:,2] + u[:,0])
+        y = mu[:,1] + u[:,1]*torch.sin(mu[:,2] + u[:,0])
+        theta = mu[:,2] + u[:,0] + u[:,2]
+        return torch.stack((x,y,theta), axis=1)
+
+    def h(self, mu, l):
+        dx = l[:,0]-mu[:,0]
+        dy = l[:,1]-mu[:,1]
+        r = torch.sqrt( dx**2 + dy**2 )
+        b = torch.atan2(dy, dx) - mu[:,2]
+        return torch.stack((r,b), 1)
 
 class Sigma(nn.Module):
     def __init__(self, sigma_size, state_size, hidden_size, n_layers):
@@ -106,7 +143,14 @@ class Sigma(nn.Module):
     def forward(self, sigma, state_predict_diff_mu):
         #do some fancy stuff to make sure it's symmetric in the end
         x = torch.cat( (sigma.view(-1, self.sigma_size**2), state_predict_diff_mu), 1)
+        before = True
+        if torch.isnan(x).any():
+            before = False
         x = self.net( x ).reshape(-1, self.sigma_size, self.sigma_size)
+        # if torch.isnan(x).any() and before == False:
+        #     for i in self.net:
+        #         if torch.isnan(i.weight).any():
+        #             print(i.weight)
         return (x + torch.transpose(x, 1, 2))
         # return x
     

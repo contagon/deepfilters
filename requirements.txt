@@ -1,3 +1,6 @@
 numpy
 numba
 sympy
+matplotlib
+tqdm
+scipy

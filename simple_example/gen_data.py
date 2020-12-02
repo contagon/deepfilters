@@ -47,7 +47,8 @@ for i in range(times):
     all_x[steps*i:steps*(i+1)] = xs
 
     n = 1000
-    pf = ParticleFilter(sys, N=n, mean=np.array([180, 50, 0]), cov=np.diag([200, 200, np.pi/4]), pz_x=sys.pz_x)
+    # pf = ParticleFilter(sys, N=n, mean=np.array([180, 50, 0]), cov=np.diag([200, 200, np.pi/4]), pz_x=sys.pz_x)
+    pf = ParticleFilter(sys, N=n, mean=xs[0], cov=np.diag([0.1, 0.1, 0.1]), pz_x=sys.pz_x)
     all_particles = []
 
     for j, (u, z) in enumerate(zip(us, zs)):
@@ -78,6 +79,12 @@ for i in range(times):
 
         bar.update(1)
     
-np.savez("odometry_particle_data.npz", p_mu=p_mu, p_cov=p_cov, u_mu=u_mu, u_cov=u_cov, z=all_z, u=all_u, start_mu=start_mu, start_cov=start_cov)
+    import matplotlib.pyplot as plt
+    plt.plot(xs[:,0], xs[:,1], label="Actual")
+    plt.plot(start_mu[steps*i:steps*(i+1),0], start_mu[steps*i:steps*(i+1),1], label="PF")
+    plt.legend()
+    plt.show()
+    
+np.savez("odometry_particle_shifted.npz", p_mu=p_mu, p_cov=p_cov, u_mu=u_mu, u_cov=u_cov, z=all_z, u=all_u, start_mu=start_mu, start_cov=start_cov)
 print(bad_time)
 print(bad_step)

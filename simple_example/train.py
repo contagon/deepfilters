@@ -145,10 +145,13 @@ def train_update_sigma(data, model, lr, epochs, plot=True):
         ax.set_title("Update Sigma Loss")
         plt.show(block=False)
 
-def train_all(data, model_psig, model_umu, model_usig, lr, epochs, batch_size=100, teacher_forcing=0, plot=True):
-    params = list(model_psig.parameters()) + list(model_umu.parameters()) + list(model_usig.parameters())
-    opt = optim.Adam(params, lr=lr)
-    objective = nn.L1Loss().cuda()
+def train_all(data, model_psig, model_umu, model_usig, lr, epochs, batch_size=100, teacher_forcing=0, N=1, plot=True):
+    objective = nn.L1Loss(reduction='none').cuda()
+    # params = list(model_psig.parameters()) + list(model_umu.parameters()) + list(model_usig.parameters())
+    # opt = optim.Adam(params, lr=lr)
+    params = list(model_psig.parameters()) + list(model_usig.parameters())
+    opt_sig = optim.Adam(params, lr=lr)
+    opt_mu = optim.Adam(model_umu.parameters(), lr=lr)
 
     val_loss = []
     train_loss = []
@@ -158,7 +161,8 @@ def train_all(data, model_psig, model_umu, model_usig, lr, epochs, batch_size=10
         idxss = data.rand_train_idx.reshape((-1, batch_size))
         #iterate through each batch of epochs
         for batch, idxs in enumerate(idxss):
-            opt.zero_grad()
+            opt_mu.zero_grad()
+            opt_sig.zero_grad()
 
             # decide if we should do teacher forcing
             if np.random.random() < teacher_forcing:
@@ -174,17 +178,21 @@ def train_all(data, model_psig, model_umu, model_usig, lr, epochs, batch_size=10
             temp = list(zip(*temp))
             train_mu, train_sig, us, zs, landmarks, y_mu, y_sig = tuple([torch.stack(i, 1) for i in temp])
 
-            loss = 0
+            loss_sig = 0
+            loss_mu = 0
             m = train_mu[0]
             s = train_sig[0]
+            num = 0
             for real_m, real_s, u, zi, li, ym, ys in zip(train_mu, train_sig, us, zs, landmarks, y_mu, y_sig):
                 #if we're teacher forcing this batch
                 if force:
                     m = real_m.clone()
                     s = real_s.clone()
-                else:
+                elif num >= N:
                     m = m.detach()
                     s = s.detach()
+                    num = 0
+                num += 1
                     
                 # predict mu
                 mi = m.clone()
@@ -216,19 +224,19 @@ def train_all(data, model_psig, model_umu, model_usig, lr, epochs, batch_size=10
                     mask = ~torch.isnan(v).byte().any(axis=1).bool().detach()
                     s[mask] = model_usig(s[mask], v[mask])
 
-                # if torch.isnan(s).any():
-                #     print(s)
-                #     break
-                # calculate loss
-                loss += objective(ym, m) + objective(ys, s)
-            
-            loss.backward()
-            opt.step()
+                loss_mu  += objective(ym, m).mean(axis=1)
+                loss_sig += objective(ys.reshape(-1,9), s.reshape(-1,9)).mean(axis=1)
 
+            loss = loss_mu.mean()/200 + loss_sig.mean()/200
+            # if loss_mu.mean() > 5000:
+                # print(loss_mu)
+            loss.backward()
+            opt_mu.step()
+            opt_sig.step()
             t.update(1)
-            if batch % (len(idxs)//100) == 0:
-                train_loss.append(loss.item())
-                t.set_description(f"Train Loss: {loss.item()}")
+            train_loss.append(loss.item())
+            t.set_description(f"Mu Loss: {loss_mu.mean().item()/200}, Sigma Loss: {loss_sig.mean().item()/200}")
+
 
 
     if plot:
@@ -264,14 +272,15 @@ def main(filename):
     u_sigma = Sigma(3, 2, 64, 24).cuda()
 
     # restore weights
-    models = torch.load('model.pkl')
+    models = torch.load(filename)
     p_sigma.load_state_dict(models['p_sigma'])
     u_mu.load_state_dict(models['u_mu'])
     u_sigma.load_state_dict(models['u_sigma'])
 
     #train them all together!
     train_all(data, p_sigma, u_mu, u_sigma, 1e-3, 10, teacher_forcing=1, batch_size=200)
-    train_all(data, p_sigma, u_mu, u_sigma, 1e-4, 10, teacher_forcing=0.5, batch_size=200)
+    train_all(data, p_sigma, u_mu, u_sigma, 1e-3, 10, teacher_forcing=0.5, N=1, batch_size=200)
+    train_all(data, p_sigma, u_mu, u_sigma, 1e-3, 10, teacher_forcing=0.5, N=3, batch_size=200)
 
     # torch.save({"p_sigma": p_sigma.state_dict(),
     #             "u_mu": u_mu.state_dict(),

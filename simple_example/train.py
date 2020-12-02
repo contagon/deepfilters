@@ -182,6 +182,9 @@ def train_all(data, model_psig, model_umu, model_usig, lr, epochs, batch_size=10
                 if force:
                     m = real_m.clone()
                     s = real_s.clone()
+                else:
+                    m = m.detach()
+                    s = s.detach()
                     
                 # predict mu
                 mi = m.clone()
@@ -256,9 +259,9 @@ def main(filename):
     #             "u_sigma": u_sigma.state_dict()}, filename)
 
     # load models in
-    p_sigma = Sigma(3, 3, 64, 24).cuda().eval()
-    u_mu = UpdateMu(3, 2, 3, 64, 24).cuda().eval()
-    u_sigma = Sigma(3, 2, 64, 24).cuda().eval()
+    p_sigma = Sigma(3, 3, 64, 24).cuda()
+    u_mu = UpdateMu(3, 2, 3, 64, 24).cuda()
+    u_sigma = Sigma(3, 2, 64, 24).cuda()
 
     # restore weights
     models = torch.load('model.pkl')

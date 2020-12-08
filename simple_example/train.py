@@ -25,12 +25,12 @@ def train_predict_sigma(data, model, lr, epochs, plot=True):
             sig_train, diff_train, y_train = data.train_predict_sigma(idx)
             x_model = model(sig_train, diff_train)
 
-            loss = objective(x_model.view(-1, 9), y_train.view(-1, 9))
+            loss = objective(x_model, y_train)
             loss.backward()
             opt.step()
 
             t.update(1)
-            t.set_description(f"Train Loss: {loss.item()}")
+            t.set_description(f"PS, Train Loss: {loss.item()}")
 
             if batch % (len(idxs)/10) == 0:
                 train_loss.append(loss.item())
@@ -41,7 +41,7 @@ def train_predict_sigma(data, model, lr, epochs, plot=True):
                     sig_train, diff_train, y_train = data.train_predict_sigma(val_idx)
                     x_model = model(sig_train, diff_train)
 
-                    loss = objective(x_model.view(-1, 9), y_train.view(-1, 9))
+                    loss = objective(x_model, y_train)
                     temp_val_loss[i] = loss.item()
                 val_loss.append( temp_val_loss.mean() )
 
@@ -50,11 +50,12 @@ def train_predict_sigma(data, model, lr, epochs, plot=True):
         ax.semilogy(np.arange(len(train_loss)), train_loss)
         ax.semilogy(np.arange(len(val_loss)), val_loss)
         ax.set_title("Predict Sigma Loss")
-        plt.show(block=False)
+        plt.draw()
+        plt.pause(0.001)
 
 def train_update_mu(data, model, lr, epochs, plot=True):
     opt = optim.Adam(model.parameters(), lr=lr)
-    objective = nn.L1Loss().cuda()
+    objective = nn.MSELoss().cuda()
 
     val_loss = []
     train_loss = []
@@ -67,15 +68,16 @@ def train_update_mu(data, model, lr, epochs, plot=True):
             sig_train, innov_train, y_train = data.train_update_mu(idx)
             x_model = torch.zeros_like(y_train)
             for i in range(innov_train.shape[1]):
-                mask = ~torch.isnan(innov_train[:,i,:]).byte().any(axis=1).bool()
+                mask = ~torch.isnan(innov_train[:,i,:]).byte().any(axis=1).bool().detach()
                 x_model[mask] += model(sig_train[mask], innov_train[mask][:,i,:])
+                # print(torch.allclose(x_model[0], x_model[1]))
 
             loss = objective(x_model, y_train)
             loss.backward()
             opt.step()
 
             t.update(1)
-            t.set_description(f"Train Loss: {loss.item()}")
+            t.set_description(f"UM, Train Loss: {loss.item()}")
 
             if batch % (len(idxs)/10) == 0:
                 train_loss.append(loss.item())
@@ -86,7 +88,7 @@ def train_update_mu(data, model, lr, epochs, plot=True):
                     sig_train, innov_train, y_train = data.train_update_mu(val_idx)
                     x_model = torch.zeros_like(y_train)
                     for i in range(innov_train.shape[1]):
-                        mask = ~torch.isnan(innov_train[:,i,:]).byte().any(axis=1).bool()
+                        mask = ~torch.isnan(innov_train[:,i,:]).byte().any(axis=1).bool().detach()
                         x_model[mask] += model(sig_train[mask], innov_train[mask][:,i,:])
 
                     loss = objective(x_model, y_train)
@@ -98,7 +100,8 @@ def train_update_mu(data, model, lr, epochs, plot=True):
         ax.semilogy(np.arange(len(train_loss)), train_loss)
         ax.semilogy(np.arange(len(val_loss)), val_loss)
         ax.set_title("Update Mu Loss")
-        plt.show(block=False)
+        plt.draw()
+        plt.pause(0.001)
 
 def train_update_sigma(data, model, lr, epochs, plot=True):
     opt = optim.Adam(model.parameters(), lr=lr)
@@ -117,12 +120,12 @@ def train_update_sigma(data, model, lr, epochs, plot=True):
                 mask = ~torch.isnan(innov_train[:,i,:]).byte().any(axis=1).bool().detach()
                 sig_train[mask] = model(sig_train[mask], innov_train[mask][:,i,:])
 
-            loss = objective(sig_train.view(-1, 9), y_train.view(-1, 9))
+            loss = objective(sig_train, y_train)
             loss.backward()
             opt.step()
 
             t.update(1)
-            t.set_description(f"Train Loss: {loss.item()}")
+            t.set_description(f"US, Train Loss: {loss.item()}")
             if batch % (len(idxs)//10) == 0:
                 train_loss.append(loss.item())
 
@@ -131,10 +134,10 @@ def train_update_sigma(data, model, lr, epochs, plot=True):
                 for j, val_idx in enumerate(val_idxs):
                     sig_train, innov_train, y_train = data.train_update_sigma(val_idx)
                     for i in range(innov_train.shape[1]):
-                        mask = ~torch.isnan(innov_train[:,i,:]).byte().any(axis=1).bool()
+                        mask = ~torch.isnan(innov_train[:,i,:]).byte().any(axis=1).bool().detach()
                         sig_train[mask] = model(sig_train[mask], innov_train[mask][:,i,:])
-
-                    loss = objective(sig_train.view(-1, 9), y_train.view(-1, 9))
+                        
+                    loss = objective(sig_train, y_train)
                     temp_val_loss[j] = loss.item()
                 val_loss.append( temp_val_loss.mean() )
 
@@ -143,9 +146,10 @@ def train_update_sigma(data, model, lr, epochs, plot=True):
         ax.semilogy(np.arange(len(train_loss)), train_loss)
         ax.semilogy(np.arange(len(val_loss)), val_loss)
         ax.set_title("Update Sigma Loss")
-        plt.show(block=False)
+        plt.draw()
+        plt.pause(0.001)
 
-def train_all(data, model_psig, model_umu, model_usig, lr, epochs, batch_size=100, teacher_forcing=0, N=1, plot=True):
+def train_all(data, model_psig, model_umu, model_usig, lr, epochs, batch_size=100, teacher_forcing=0, plot=True):
     objective = nn.L1Loss(reduction='none').cuda()
     # params = list(model_psig.parameters()) + list(model_umu.parameters()) + list(model_usig.parameters())
     # opt = optim.Adam(params, lr=lr)
@@ -182,17 +186,14 @@ def train_all(data, model_psig, model_umu, model_usig, lr, epochs, batch_size=10
             loss_mu = 0
             m = train_mu[0]
             s = train_sig[0]
-            num = 0
             for real_m, real_s, u, zi, li, ym, ys in zip(train_mu, train_sig, us, zs, landmarks, y_mu, y_sig):
                 #if we're teacher forcing this batch
                 if force:
                     m = real_m.clone()
                     s = real_s.clone()
-                elif num >= N:
+                else:
                     m = m.detach()
                     s = s.detach()
-                    num = 0
-                num += 1
                     
                 # predict mu
                 mi = m.clone()
@@ -225,16 +226,16 @@ def train_all(data, model_psig, model_umu, model_usig, lr, epochs, batch_size=10
                     s[mask] = model_usig(s[mask], v[mask])
 
                 loss_mu  += objective(ym, m).mean(axis=1)
-                loss_sig += objective(ys.reshape(-1,9), s.reshape(-1,9)).mean(axis=1)
+                loss_sig += objective(ys, s).mean(axis=1)
 
             loss = loss_mu.mean()/200 + loss_sig.mean()/200
             # if loss_mu.mean() > 5000:
                 # print(loss_mu)
             loss.backward()
-            opt_mu.step()
+            # opt_mu.step()
             opt_sig.step()
             t.update(1)
-            train_loss.append(loss.item())
+            train_loss.append(loss.item()/200)
             t.set_description(f"Mu Loss: {loss_mu.mean().item()/200}, Sigma Loss: {loss_sig.mean().item()/200}")
 
 
@@ -243,48 +244,49 @@ def train_all(data, model_psig, model_umu, model_usig, lr, epochs, batch_size=10
         fig, ax = plt.subplots()
         ax.semilogy(np.arange(len(train_loss)), train_loss)
         ax.set_title("Total Together Loss")
-        plt.show(block=False)
+        plt.draw()
+        plt.pause(0.001)
 
 def main(filename):
     # we'll train each network individually for a while first
     # Then we'll work on training as a sequence to help it stand on it's own
-    data = OdometryData("odometry_particle_data.npz", split=8000)
+    data = OdometryData("odometry_particle_shifted.npz", split=8000)
 
-    #first PredictSigma
-    # p_sigma = Sigma(3, 3, 64, 24).cuda()
-    # train_predict_sigma(data, p_sigma, 1e-2, 5, plot=True)
+    # #first PredictSigma
+    # p_sigma = Sigma(3, 3, 64, 12).cuda()
+    # train_predict_sigma(data, p_sigma, 1e-3, 5, plot=True)
 
-    # #next UpdateMu
-    # u_mu = UpdateMu(3, 2, 3, 64, 24).cuda()
+    # # #next UpdateMu
+    # u_mu = UpdateMu(3, 2, 3, 64, 12).cuda()
     # train_update_mu(data, u_mu, 1e-3, 5, plot=True)
 
-    # #finally UpdateSigma
-    # u_sigma = Sigma(3, 2, 64, 24).cuda()
-    # train_update_sigma(data, u_sigma, 1e-2, 5, plot=True)
+    # # #finally UpdateSigma
+    # u_sigma = Sigma(3, 2, 64, 12).cuda()
+    # train_update_sigma(data, u_sigma, 1e-3, 5, plot=True)
 
     # torch.save({"p_sigma": p_sigma.state_dict(),
     #             "u_mu": u_mu.state_dict(),
-    #             "u_sigma": u_sigma.state_dict()}, filename)
+    #             "u_sigma": u_sigma.state_dict()}, filename+"temp")
 
     # load models in
-    p_sigma = Sigma(3, 3, 64, 24).cuda()
-    u_mu = UpdateMu(3, 2, 3, 64, 24).cuda()
-    u_sigma = Sigma(3, 2, 64, 24).cuda()
+    p_sigma = Sigma(3, 3, 64, 12).cuda()
+    u_mu = UpdateMu(3, 2, 3, 64, 12).cuda()
+    u_sigma = Sigma(3, 2, 64, 12).cuda()
 
     # restore weights
-    models = torch.load(filename)
+    models = torch.load(filename+"temp")
     p_sigma.load_state_dict(models['p_sigma'])
     u_mu.load_state_dict(models['u_mu'])
     u_sigma.load_state_dict(models['u_sigma'])
 
     #train them all together!
-    train_all(data, p_sigma, u_mu, u_sigma, 1e-3, 10, teacher_forcing=1, batch_size=200)
-    train_all(data, p_sigma, u_mu, u_sigma, 1e-3, 10, teacher_forcing=0.5, N=1, batch_size=200)
-    train_all(data, p_sigma, u_mu, u_sigma, 1e-3, 10, teacher_forcing=0.5, N=3, batch_size=200)
+    train_all(data, p_sigma, u_mu, u_sigma, 1e-3, 2, teacher_forcing=1, batch_size=200)
+    train_all(data, p_sigma, u_mu, u_sigma, 1e-3, 2, teacher_forcing=0.5, batch_size=200)
+    train_all(data, p_sigma, u_mu, u_sigma, 1e-3, 5, teacher_forcing=0, batch_size=200)
 
-    # torch.save({"p_sigma": p_sigma.state_dict(),
-    #             "u_mu": u_mu.state_dict(),
-    #             "u_sigma": u_sigma.state_dict()}, filename)
+    torch.save({"p_sigma": p_sigma.state_dict(),
+                "u_mu": u_mu.state_dict(),
+                "u_sigma": u_sigma.state_dict()}, filename)
 
     plt.show()
     

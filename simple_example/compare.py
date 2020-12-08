@@ -18,7 +18,7 @@ u_mu.load_state_dict(models['u_mu'])
 u_sigma.load_state_dict(models['u_sigma'])
 
 # load data
-n = 9000
+n = 9001
 data = OdometryData("odometry_particle_shifted.npz", split=8000)
 train_mu, train_sig, us, zs, landmarks, y_mu, y_sig = data.train_all(n)
 m = train_mu[0].unsqueeze(0)
@@ -66,15 +66,15 @@ mu_pf = y_mu.cpu().detach().numpy()
 mu_network = np.array(m_result).squeeze()
 
 # plot things!
-# plt.plot(mu_actual[:,0], mu_actual[:,1], label="Ground Truth")
-# plt.plot(mu_pf[:,0], mu_pf[:,1], label="PF Result")
-# plt.plot(mu_network[:,0], mu_network[:,1], label="Network Result")
-# plt.legend()
-# plt.show()
-
-t = np.arange(200)
-plt.plot(t, mu_actual[:,2], label="Actual")
-plt.plot(np.arange(199), mu_pf[:,2], label="PF Result")
-plt.plot(t, mu_network[:,2], label="Network Result")
+plt.plot(mu_actual[:,0], mu_actual[:,1], label="Ground Truth")
+plt.plot(mu_pf[:,0], mu_pf[:,1], label="PF Result")
+plt.plot(mu_network[:,0], mu_network[:,1], label="Network Result")
 plt.legend()
 plt.show()
+
+# t = np.arange(200)
+# plt.plot(t, mu_actual[:,2], label="Actual")
+# plt.plot(np.arange(199), mu_pf[:,2], label="PF Result")
+# plt.plot(t, mu_network[:,2], label="Network Result")
+# plt.legend()
+# plt.show()

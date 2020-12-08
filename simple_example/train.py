@@ -244,7 +244,7 @@ def train_all(data, model_psig, model_umu, model_usig, lr, epochs, batch_size=10
             # opt_mu.step()
             opt_sig.step()
             t.update(1)
-            train_loss.append(loss.item()/200)
+            train_loss.append(loss.item())
             t.set_description(f"Mu Loss: {loss_mu.mean().item()/200}, Sigma Loss: {loss_sig.mean().item()/200}")
 
 
@@ -271,7 +271,7 @@ def main(filename):
 
     # # #finally UpdateSigma
     u_sigma = Sigma(3, 2, 64, 12).cuda()
-    train_update_sigma(data, u_sigma, 1e-3, 3, plot=True)
+    train_update_sigma(data, u_sigma, 1e-3, 5, plot=True)
 
     torch.save({"p_sigma": p_sigma.state_dict(),
                 "u_mu": u_mu.state_dict(),
@@ -290,7 +290,7 @@ def main(filename):
 
     #train them all together!
     # train_all(data, p_sigma, u_mu, u_sigma, 1e-3, 2, teacher_forcing=1, batch_size=200)
-    train_all(data, p_sigma, u_mu, u_sigma, 1e-3, 2, teacher_forcing=0.5, batch_size=200)
+    train_all(data, p_sigma, u_mu, u_sigma, 1e-3, 5, teacher_forcing=0.5, batch_size=200)
     train_all(data, p_sigma, u_mu, u_sigma, 1e-3, 5, teacher_forcing=0, batch_size=200)
 
     torch.save({"p_sigma": p_sigma.state_dict(),

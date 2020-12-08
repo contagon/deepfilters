@@ -26,6 +26,7 @@ def train_predict_sigma(data, model, lr, epochs, plot=True):
             sig_train, diff_train, y_train = data.train_predict_sigma(idx)
             x_model = model(sig_train, diff_train)
 
+            y_train = model.norm_output(y_train.clone())
             loss = objective(x_model, y_train)
             loss.backward()
             opt.step()
@@ -42,6 +43,7 @@ def train_predict_sigma(data, model, lr, epochs, plot=True):
                     sig_train, diff_train, y_train = data.train_predict_sigma(val_idx)
                     x_model = model(sig_train, diff_train)
 
+                    y_train = model.norm_output(y_train.clone())
                     loss = objective(x_model, y_train)
                     temp_val_loss[i] = loss.item()
                 val_loss.append( temp_val_loss.mean() )
@@ -73,11 +75,8 @@ def train_update_mu(data, model, lr, epochs, plot=True):
                 x_model[mask] += model(sig_train[mask], innov_train[mask][:,i,:])
 
             #scale so outputs are same size ish
-            x_model[:,2]*= 10
-            y_train_temp = y_train.clone()
-            y_train_temp[:,2] *= 10
-
-            loss = objective(x_model, y_train_temp)
+            y_train = model.norm_output(y_train.clone())
+            loss = objective(x_model, y_train)
             loss.backward()
             opt.step()
 
@@ -96,10 +95,7 @@ def train_update_mu(data, model, lr, epochs, plot=True):
                         mask = ~torch.isnan(innov_train[:,i,:]).byte().any(axis=1).bool().detach()
                         x_model[mask] += model(sig_train[mask], innov_train[mask][:,i,:])
 
-                    x_model[:,2]*= 10
-                    y_train_temp = y_train.clone()
-                    y_train_temp[:,2] *= 10
-
+                    y_train = model.norm_output(y_train.clone())
                     loss = objective(x_model, y_train)
                     temp_val_loss[j] = loss.item()
                 val_loss.append( temp_val_loss.mean() )
@@ -129,6 +125,7 @@ def train_update_sigma(data, model, lr, epochs, plot=True):
                 mask = ~torch.isnan(innov_train[:,i,:]).byte().any(axis=1).bool().detach()
                 sig_train[mask] = model(sig_train[mask], innov_train[mask][:,i,:])
 
+            y_train = model.norm_output(y_train.clone())
             loss = objective(sig_train, y_train)
             loss.backward()
             opt.step()
@@ -146,6 +143,7 @@ def train_update_sigma(data, model, lr, epochs, plot=True):
                         mask = ~torch.isnan(innov_train[:,i,:]).byte().any(axis=1).bool().detach()
                         sig_train[mask] = model(sig_train[mask], innov_train[mask][:,i,:])
                         
+                    y_train = model.norm_output(y_train.clone())
                     loss = objective(sig_train, y_train)
                     temp_val_loss[j] = loss.item()
                 val_loss.append( temp_val_loss.mean() )
@@ -186,7 +184,6 @@ def train_all(data, model_psig, model_umu, model_usig, lr, epochs, batch_size=10
             #run deepfilter on each timestep, adding together losses (if they're not too huge..)
             temp = []
             for idx in idxs:
-                # train_mu, train_sig, us, zs, landmarks, y_mu, y_sig = data.train_all(idx)
                 temp.append( data.train_all(idx) )
             temp = list(zip(*temp))
             train_mu, train_sig, us, zs, landmarks, y_mu, y_sig = tuple([torch.stack(i, 1) for i in temp])
@@ -208,7 +205,7 @@ def train_all(data, model_psig, model_umu, model_usig, lr, epochs, batch_size=10
                 mi = m.clone()
                 m = data.f(mi, u)
                 #predict sigma
-                s = model_psig(s, m-mi)
+                s = model_psig(s, m-mi, norm_out=False)
 
                 # calculate innovation
                 vs = []
@@ -227,26 +224,24 @@ def train_all(data, model_psig, model_umu, model_usig, lr, epochs, batch_size=10
                 #update mu
                 for v in vs.transpose(0,1):
                     mask = ~torch.isnan(v).byte().any(axis=1).bool().detach()
-                    m[mask] += model_umu(s[mask], v[mask])
+                    m[mask] += model_umu(s[mask], v[mask], normed_out=False)
 
                 # update sigma
                 for v in vs.transpose(0,1):
                     mask = ~torch.isnan(v).byte().any(axis=1).bool().detach()
-                    s[mask] = model_usig(s[mask], v[mask])
+                    s[mask] = model_usig(s[mask], v[mask], normed_out=False)
 
-                loss_mu  += objective(ym, m).mean(axis=1)
-                loss_sig += objective(ys, s).mean(axis=1)
+                loss_mu  += objective(model_umu.norm_output(ym.clone()), model_umu.norm_output(m.clone())).mean(axis=1)
+                loss_sig += objective(model_usig.norm_output(ys.clone()), model_usig.norm_output(s.clone())).mean(axis=1)
 
             loss = loss_mu.mean()/200 + loss_sig.mean()/200
-            # if loss_mu.mean() > 5000:
-                # print(loss_mu)
             loss.backward()
-            # opt_mu.step()
+            opt_mu.step()
             opt_sig.step()
+            
             t.update(1)
             train_loss.append(loss.item())
             t.set_description(f"Mu Loss: {loss_mu.mean().item()/200}, Sigma Loss: {loss_sig.mean().item()/200}")
-
 
 
     if plot:
@@ -260,22 +255,23 @@ def main(filename):
     # we'll train each network individually for a while first
     # Then we'll work on training as a sequence to help it stand on it's own
     data = OdometryData("odometry_particle_shifted.npz", split=8000)
+    all = slice(None,None)
 
     # #first PredictSigma
-    p_sigma = Sigma(3, 3, 64, 12).cuda()
+    p_sigma = Sigma(3, 3, 64, 12, *data.train_predict_sigma(all)).cuda()
     train_predict_sigma(data, p_sigma, 1e-3, 5, plot=True)
 
     # # #next UpdateMu
-    u_mu = UpdateMu(3, 2, 3, 64, 12).cuda()
+    u_mu = UpdateMu(3, 2, 3, 64, 12, *data.train_update_mu(all)).cuda()
     train_update_mu(data, u_mu, 1e-3, 3, plot=True)
 
     # # #finally UpdateSigma
-    u_sigma = Sigma(3, 2, 64, 12).cuda()
+    u_sigma = Sigma(3, 2, 64, 12, *data.train_update_sigma(all)).cuda()
     train_update_sigma(data, u_sigma, 1e-3, 5, plot=True)
 
-    torch.save({"p_sigma": p_sigma.state_dict(),
-                "u_mu": u_mu.state_dict(),
-                "u_sigma": u_sigma.state_dict()}, filename+"temp")
+    # torch.save({"p_sigma": p_sigma.state_dict(),
+    #             "u_mu": u_mu.state_dict(),
+    #             "u_sigma": u_sigma.state_dict()}, filename+"temp")
 
     # # load models in
     # p_sigma = Sigma(3, 3, 64, 12).cuda()
@@ -290,8 +286,8 @@ def main(filename):
 
     #train them all together!
     # train_all(data, p_sigma, u_mu, u_sigma, 1e-3, 2, teacher_forcing=1, batch_size=200)
-    train_all(data, p_sigma, u_mu, u_sigma, 1e-3, 5, teacher_forcing=0.5, batch_size=200)
-    train_all(data, p_sigma, u_mu, u_sigma, 1e-3, 5, teacher_forcing=0, batch_size=200)
+    train_all(data, p_sigma, u_mu, u_sigma, 1e-3, 5, teacher_forcing=0.5, batch_size=100)
+    train_all(data, p_sigma, u_mu, u_sigma, 1e-3, 5, teacher_forcing=0, batch_size=100)
 
     torch.save({"p_sigma": p_sigma.state_dict(),
                 "u_mu": u_mu.state_dict(),

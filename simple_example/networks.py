@@ -9,6 +9,20 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm, trange
 from deepfilters.systems import OdometrySystem
 
+class Normalize(nn.Module):
+    def __init__(self, data):
+        super().__init__()
+        data = data.view(-1, data.shape[-1])
+        mask = ~torch.isnan(data).byte().any(axis=1).bool().detach()
+        self.mean = data[mask].mean(axis=0)
+        self.std  = data[mask].std(axis=0)
+
+    def forward(self, x):
+        return (x - self.mean) / self.std
+
+    def undo(self, x):
+        return x * self.std + self.mean
+
 class OdometryData:
     def __init__(self, filename, split=8000):
         self.cov_idx = torch.triu_indices(3,3)
@@ -30,11 +44,11 @@ class OdometryData:
         self.start_mu = self.data['start_mu']
         self.u = self.data['u']
         self.mubar = np.array( self.sys.f_np(self.start_mu.T, self.u.T) ).T
-        self.start_cov = torch.tensor( self.data['start_cov'] ).float().cuda()[:, self.cov_idx[0], self.cov_idx[1]]
-        self.predict_diff_mu = torch.tensor( self.mubar - self.start_mu ).float().cuda()
-        self.p_cov = torch.tensor( self.data['p_cov'] ).float().cuda()[:, self.cov_idx[0], self.cov_idx[1]]
-        self.start_mu = torch.tensor( self.start_mu ).float().cuda()
-        self.u = torch.tensor(self.u).float().cuda()
+        self.start_cov = torch.tensor( self.data['start_cov'] ).float().cuda()[:, self.cov_idx[0], self.cov_idx[1]].reshape(-1, 200, 6)
+        self.predict_diff_mu = torch.tensor( self.mubar - self.start_mu ).float().cuda().reshape(-1, 200, 3)
+        self.p_cov = torch.tensor( self.data['p_cov'] ).float().cuda()[:, self.cov_idx[0], self.cov_idx[1]].reshape(-1, 200, 6)
+        self.start_mu = torch.tensor( self.start_mu ).float().cuda().reshape(-1, 200, 3)
+        self.u = torch.tensor(self.u).float().cuda().reshape(-1, 200, 3)
 
         # used for update_mu/sigma networks
         self.z = self.data['z']
@@ -47,7 +61,7 @@ class OdometryData:
             li = l[self.z[:,i,2].astype('int')-1]
             lis.append( li )
             zbar.append( self.sys.h_np(self.p_mu.T, li.T).T )
-        self.lis = torch.tensor( np.transpose( np.array(lis), (1,0,2)) ).float().cuda()
+        self.lis = torch.tensor( np.transpose( np.array(lis), (1,0,2)) ).float().cuda().reshape(-1, 200, 2, 2)
         self.zbar = np.transpose( np.array(zbar), (1,0,2))
         self.update_v = self.z[:,:,:2] - self.zbar
         # unwrap as needed
@@ -56,10 +70,10 @@ class OdometryData:
         while np.any( self.update_v[:,:,1] < -np.pi ):
             self.update_v[ self.update_v[:,:,1] < -np.pi ] += 2*np.pi
 
-        self.update_v = torch.tensor( self.update_v ).float().cuda()
-        self.update_diff_mu = torch.tensor( self.data['u_mu'] - self.p_mu ).float().cuda()
-        self.u_cov = torch.tensor( self.data['u_cov'] ).float().cuda()[:, self.cov_idx[0], self.cov_idx[1]]
-        self.z = torch.tensor( self.z[:,:,:2] ).float().cuda()
+        self.update_v = torch.tensor( self.update_v ).float().cuda().reshape(-1, 200, 2, 2)
+        self.update_diff_mu = torch.tensor( self.data['u_mu'] - self.p_mu ).float().cuda().reshape(-1, 200, 3)
+        self.u_cov = torch.tensor( self.data['u_cov'] ).float().cuda()[:, self.cov_idx[0], self.cov_idx[1]].reshape(-1, 200, 6)
+        self.z = torch.tensor( self.z[:,:,:2] ).float().cuda().reshape(-1, 200, 2, 2)
 
         ### NORMALIZING
         # We need to normalize all of our data to be able to use it properly
@@ -87,21 +101,21 @@ class OdometryData:
         return idx
 
     def train_predict_sigma(self, idx):
-        sig_train = self.start_cov[idx*200:(idx+1)*200]
-        predict_diff_mu_train = self.predict_diff_mu[idx*200:(idx+1)*200] 
-        y_train = self.p_cov[idx*200:(idx+1)*200]
+        sig_train = self.start_cov[idx]
+        predict_diff_mu_train = self.predict_diff_mu[idx] 
+        y_train = self.p_cov[idx]
         return sig_train, predict_diff_mu_train, y_train
 
     def train_update_mu(self, idx):
-        sig_train = self.p_cov[idx*200:(idx+1)*200]
-        update_v = self.update_v[idx*200:(idx+1)*200]
-        y_train = self.update_diff_mu[idx*200:(idx+1)*200]
+        sig_train = self.p_cov[idx]
+        update_v = self.update_v[idx]
+        y_train = self.update_diff_mu[idx]
         return sig_train, update_v, y_train
 
     def train_update_sigma(self, idx):
-        sig_train = self.p_cov[idx*200:(idx+1)*200].detach()
-        update_v = self.update_v[idx*200:(idx+1)*200]
-        y_train = self.u_cov[idx*200:(idx+1)*200]
+        sig_train = self.p_cov[idx].detach()
+        update_v = self.update_v[idx]
+        y_train = self.u_cov[idx]
         return sig_train, update_v, y_train
 
     def train_all(self, idx):
@@ -109,15 +123,15 @@ class OdometryData:
         #then we'll get into for each step
 
         # for predict mu
-        start_mu = self.start_mu[idx*200:(idx+1)*200]
-        u = self.u[idx*200:(idx+1)*200]
+        start_mu = self.start_mu[idx]
+        u = self.u[idx]
 
         # for predict sigma
-        start_sig = self.start_cov[idx*200:(idx+1)*200]
+        start_sig = self.start_cov[idx]
 
         # for update mu
-        landmarks = self.lis[idx*200:(idx+1)*200]
-        z = self.z[idx*200:(idx+1)*200]
+        landmarks = self.lis[idx]
+        z = self.z[idx]
         # for update sigma
 
         return start_mu[:-1], start_sig[:-1], u[:-1], z[:-1], landmarks[:-1], start_mu[1:], start_sig[1:] 
@@ -136,7 +150,7 @@ class OdometryData:
         return torch.stack((r,b), 1)
 
 class Sigma(nn.Module):
-    def __init__(self, sigma_size, state_size, hidden_size, n_layers):
+    def __init__(self, sigma_size, state_size, hidden_size, n_layers, sigma_data, state_data, output_data):
         super().__init__()
         self.state_size = state_size
         self.sigma_size = sigma_size
@@ -154,15 +168,21 @@ class Sigma(nn.Module):
         
         self.net = nn.Sequential(*layers)
 
-    def forward(self, sigma, state_predict_diff_mu):
+        self.norm_sigma = Normalize(sigma_data)
+        self.norm_state = Normalize(state_data)
+        self.norm_output = Normalize(output_data)
+
+    def forward(self, sigma, state_predict_diff_mu, norm_out=True):
         #do some fancy stuff to make sure it's symmetric in the end
-        x = torch.cat( (sigma, state_predict_diff_mu), 1)
-        return self.net(x)
-        # return x
+        x = torch.cat( (self.norm_sigma(sigma), self.norm_state(state_predict_diff_mu)), 1)
+        x = self.net(x)
+        if norm_out:
+            x = self.norm_output(x)
+        return x
     
 
 class UpdateMu(nn.Module):
-    def __init__(self, sigma_size, innovation_size, state_size, hidden_size, n_layers):
+    def __init__(self, sigma_size, innovation_size, state_size, hidden_size, n_layers, sigma_data, innov_data, output_data):
         super().__init__()
         self.sigma_size = sigma_size
         self.innovation_size = innovation_size
@@ -181,10 +201,17 @@ class UpdateMu(nn.Module):
         
         self.net = nn.Sequential(*layers)
 
-    def forward(self, sigma, innovation):
+        self.norm_sigma = Normalize(sigma_data)
+        self.norm_innov= Normalize(innov_data)
+        self.norm_output = Normalize(output_data)
+
+    def forward(self, sigma, innovation, norm_out=True):
         #do some fancy stuff to make sure it's symmetric in the end
-        x = torch.cat( (sigma, innovation), 1)
-        return  self.net(x)
+        x = torch.cat( (self.norm_sigma(sigma), self.norm_innov(innovation)), 1)
+        x = self.net(x)
+        if norm_out:
+            x = self.norm_output(x)
+        return x
 
 
 if __name__ == "__main__":

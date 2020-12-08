@@ -11,6 +11,7 @@ from deepfilters.systems import OdometrySystem
 
 class OdometryData:
     def __init__(self, filename, split=8000):
+        self.cov_idx = torch.triu_indices(3,3)
         self.data = np.load(filename)
 
         self.split = split
@@ -29,9 +30,9 @@ class OdometryData:
         self.start_mu = self.data['start_mu']
         self.u = self.data['u']
         self.mubar = np.array( self.sys.f_np(self.start_mu.T, self.u.T) ).T
-        self.start_cov = torch.tensor( self.data['start_cov'] ).float().cuda()
+        self.start_cov = torch.tensor( self.data['start_cov'] ).float().cuda()[:, self.cov_idx[0], self.cov_idx[1]]
         self.predict_diff_mu = torch.tensor( self.mubar - self.start_mu ).float().cuda()
-        self.p_cov = torch.tensor( self.data['p_cov'] ).float().cuda()
+        self.p_cov = torch.tensor( self.data['p_cov'] ).float().cuda()[:, self.cov_idx[0], self.cov_idx[1]]
         self.start_mu = torch.tensor( self.start_mu ).float().cuda()
         self.u = torch.tensor(self.u).float().cuda()
 
@@ -57,8 +58,21 @@ class OdometryData:
 
         self.update_v = torch.tensor( self.update_v ).float().cuda()
         self.update_diff_mu = torch.tensor( self.data['u_mu'] - self.p_mu ).float().cuda()
-        self.u_cov = torch.tensor( self.data['u_cov'] ).float().cuda()
+        self.u_cov = torch.tensor( self.data['u_cov'] ).float().cuda()[:, self.cov_idx[0], self.cov_idx[1]]
         self.z = torch.tensor( self.z[:,:,:2] ).float().cuda()
+
+        ### NORMALIZING
+        # We need to normalize all of our data to be able to use it properly
+        def normalize(data):
+            mask = ~torch.isnan(data).byte().any(axis=1).bool().detach()
+            data[mask] = (data[mask] - data[mask].mean(axis=0)) / data[mask].std(axis=0)
+            return data
+        # predict sigma
+        # self.predict_diff_mu = normalize( self.predict_diff_mu )
+        # # update mu
+        # self.p_cov = normalize( self.p_cov[:, self.cov_idx[0], self.cov_idx[1]] )
+        # self.update_v = normalize( self.update_v )
+        # self.update_diff_mu = normalize( self.update_diff_mu )
 
     @property
     def rand_train_idx(self):
@@ -127,8 +141,8 @@ class Sigma(nn.Module):
         self.state_size = state_size
         self.sigma_size = sigma_size
 
-        self.input_size = sigma_size**2 + state_size
-        self.output_size = sigma_size**2
+        self.input_size = sigma_size*(sigma_size+1)//2 + state_size
+        self.output_size = sigma_size*(sigma_size+1)//2
         self.hidden_size = hidden_size
 
         layers = [nn.Linear(self.input_size, self.hidden_size),
@@ -142,16 +156,8 @@ class Sigma(nn.Module):
 
     def forward(self, sigma, state_predict_diff_mu):
         #do some fancy stuff to make sure it's symmetric in the end
-        x = torch.cat( (sigma.view(-1, self.sigma_size**2), state_predict_diff_mu), 1)
-        before = True
-        if torch.isnan(x).any():
-            before = False
-        x = self.net( x ).reshape(-1, self.sigma_size, self.sigma_size)
-        # if torch.isnan(x).any() and before == False:
-        #     for i in self.net:
-        #         if torch.isnan(i.weight).any():
-        #             print(i.weight)
-        return (x + torch.transpose(x, 1, 2))
+        x = torch.cat( (sigma, state_predict_diff_mu), 1)
+        return self.net(x)
         # return x
     
 
@@ -162,7 +168,7 @@ class UpdateMu(nn.Module):
         self.innovation_size = innovation_size
         self.state_size = state_size
 
-        self.input_size = sigma_size**2 + innovation_size
+        self.input_size = sigma_size*(sigma_size+1)//2 + innovation_size
         self.output_size = state_size
         self.hidden_size = hidden_size
 
@@ -171,13 +177,13 @@ class UpdateMu(nn.Module):
         for i in range(n_layers):
             layers.append( nn.Linear(self.hidden_size, self.hidden_size) )
             layers.append( nn.ReLU() )
-        layers.append( nn.Linear(self.hidden_size, self.output_size) )
+        layers.append( nn.Linear(self.hidden_size, self.output_size, bias=False) )
         
         self.net = nn.Sequential(*layers)
 
     def forward(self, sigma, innovation):
         #do some fancy stuff to make sure it's symmetric in the end
-        x = torch.cat( (sigma.view(-1, self.sigma_size**2), innovation), 1)
+        x = torch.cat( (sigma, innovation), 1)
         return  self.net(x)
 
 

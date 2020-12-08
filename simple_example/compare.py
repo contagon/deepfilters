@@ -4,25 +4,25 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.io import loadmat
 from networks import *
-
+import sys
 
 # load models in
-p_sigma = Sigma(3, 3, 64, 24).cuda().eval()
-u_mu = UpdateMu(3, 2, 3, 64, 24).cuda().eval()
-u_sigma = Sigma(3, 2, 64, 24).cuda().eval()
+p_sigma = Sigma(3, 3, 64, 12).cuda().eval()
+u_mu = UpdateMu(3, 2, 3, 64, 12).cuda().eval()
+u_sigma = Sigma(3, 2, 64, 12).cuda().eval()
 
 # restore weights
-models = torch.load('model.pkl')
+models = torch.load(sys.argv[1])
 p_sigma.load_state_dict(models['p_sigma'])
 u_mu.load_state_dict(models['u_mu'])
 u_sigma.load_state_dict(models['u_sigma'])
 
 # load data
 n = 9000
-data = OdometryData("odometry_particle_data.npz", split=8000)
+data = OdometryData("odometry_particle_shifted.npz", split=8000)
 train_mu, train_sig, us, zs, landmarks, y_mu, y_sig = data.train_all(n)
 m = train_mu[0].unsqueeze(0)
-s = train_sig[0]
+s = train_sig[0].unsqueeze(0)
 m_result = [m.cpu().detach().numpy()]
 
 # iterate through
@@ -32,7 +32,7 @@ for u, zi, li in zip(us, zs, landmarks):
     m = data.f(mi, u.unsqueeze(0))
 
     #predict sigma
-    s = p_sigma(s.unsqueeze(0), m-mi)
+    s = p_sigma(s, m-mi)
 
     # calculate innovation
     vs = []
@@ -53,6 +53,8 @@ for u, zi, li in zip(us, zs, landmarks):
     #update mu
     for v in vs:
         m += u_mu(s, v.unsqueeze(0))
+        # print(v)
+        # print(u_mu(s, v.unsqueeze(0)))
 
     # update sigma
     for v in vs:

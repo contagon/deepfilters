@@ -46,15 +46,12 @@ for u, zi, li in zip(us, zs, landmarks):
         while v[:,1] < -np.pi:
             v[:,1] += 2*np.pi
         vs.append(v)
-
     if vs != []:
         vs = torch.cat(vs, 0)
 
     #update mu
     for v in vs:
         m += u_mu(s, v.unsqueeze(0))
-        # print(v)
-        # print(u_mu(s, v.unsqueeze(0)))
 
     # update sigma
     for v in vs:
@@ -69,8 +66,15 @@ mu_pf = y_mu.cpu().detach().numpy()
 mu_network = np.array(m_result).squeeze()
 
 # plot things!
-plt.plot(mu_actual[:,0], mu_actual[:,1], label="Ground Truth")
-plt.plot(mu_pf[:,0], mu_pf[:,1], label="PF Result")
-plt.plot(mu_network[:,0], mu_network[:,1], label="Network Result")
+# plt.plot(mu_actual[:,0], mu_actual[:,1], label="Ground Truth")
+# plt.plot(mu_pf[:,0], mu_pf[:,1], label="PF Result")
+# plt.plot(mu_network[:,0], mu_network[:,1], label="Network Result")
+# plt.legend()
+# plt.show()
+
+t = np.arange(200)
+plt.plot(t, mu_actual[:,2], label="Actual")
+plt.plot(np.arange(199), mu_pf[:,2], label="PF Result")
+plt.plot(t, mu_network[:,2], label="Network Result")
 plt.legend()
 plt.show()

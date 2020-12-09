@@ -128,9 +128,7 @@ def train_update_sigma(data, model, lr, epochs, plot=True):
                 mask = ~torch.isnan(innov_train[:,i,:]).byte().any(axis=1).bool().detach()
                 sig_train[mask] = model(sig_train[mask], innov_train[mask][:,i,:], norm_out=False)
 
-            sig_train = model.norm_output(sig_train)
-            y_train = model.norm_output(y_train.clone())
-            loss = objective(sig_train, y_train)
+            loss = objective(model.norm_output(sig_train), model.norm_output(y_train))
             loss.backward()
             opt.step()
 
@@ -147,9 +145,7 @@ def train_update_sigma(data, model, lr, epochs, plot=True):
                         mask = ~torch.isnan(innov_train[:,i,:]).byte().any(axis=1).bool().detach()
                         sig_train[mask] = model(sig_train[mask], innov_train[mask][:,i,:], norm_out=False)
                         
-                    sig_train = model.norm_output(sig_train)
-                    y_train = model.norm_output(y_train.clone())
-                    loss = objective(sig_train, y_train)
+                    loss = objective(model.norm_output(sig_train), model.norm_output(y_train))
                     temp_val_loss[j] = loss.item()
                 val_loss.append( temp_val_loss.mean() )
 

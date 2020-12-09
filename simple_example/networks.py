@@ -9,6 +9,14 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm, trange
 from deepfilters.systems import OdometrySystem
 
+class ResidualBlock(nn.Module):
+    def __init__(self, linear, activation):
+        super().__init__()
+        self.linear = linear
+        self.activation = activation
+    def forward(self, x):
+        return self.activation( x + self.linear(x) )
+        
 class Normalize(nn.Module):
     def __init__(self, data):
         super().__init__()

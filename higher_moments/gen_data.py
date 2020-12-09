@@ -46,11 +46,11 @@ all_x = np.zeros((times, steps, 3))
 start = {}
 middle = {}
 end = {}
-for i in range(1,moments):
-    num = len(list(cwr(np.arange(3), i)))
-    start[i] = np.zeros((times, steps, num))
-    middle[i] = np.zeros((times, steps, num))
-    end[i] = np.zeros((times, steps, num))
+for m in range(moments):
+    num = len(list(cwr(np.arange(3), m+1)))
+    start[m]  = np.zeros((times, steps, num))
+    middle[m] = np.zeros((times, steps, num))
+    end[m]    = np.zeros((times, steps, num))
 
 bar = tqdm(total=times*steps)
 
@@ -75,12 +75,12 @@ for i in range(times):
         # save where we started at each time step
         # somewhat redundant, but makes things a bit easier later
         for m in range(moments):
-            start[m][i,j] = calc_moment(pf.particles, m)
+            start[m][i,j] = calc_moment(pf.particles, m+1)
 
         # predict step and save
         p = pf.predict(u)
         for m in range(moments):
-            middle[m][i,j] = calc_moment(p, m)
+            middle[m][i,j] = calc_moment(p, m+1)
 
         # clean measurements
         temp = z[ ~np.isnan(z).any(axis=1) ]
@@ -96,7 +96,7 @@ for i in range(times):
                 bad_step.append(j)
 
         for m in range(moments):
-            end[m][i,j] = calc_moment(p, m)
+            end[m][i,j] = calc_moment(p, m+1)
 
         bar.update(1)
     

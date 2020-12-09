@@ -46,8 +46,8 @@ all_x = np.zeros((times, steps, 3))
 start = {}
 middle = {}
 end = {}
-for m in range(moments):
-    num = len(list(cwr(np.arange(3), m+1)))
+for m in range(1, moments+1):
+    num = len(list(cwr(np.arange(3), m)))
     start[m]  = np.zeros((times, steps, num))
     middle[m] = np.zeros((times, steps, num))
     end[m]    = np.zeros((times, steps, num))
@@ -74,13 +74,13 @@ for i in range(times):
     for j, (u, z) in enumerate(zip(us, zs)):
         # save where we started at each time step
         # somewhat redundant, but makes things a bit easier later
-        for m in range(moments):
-            start[m][i,j] = calc_moment(pf.particles, m+1)
+        for m in range(1, moments+1):
+            start[m][i,j] = calc_moment(pf.particles, m)
 
         # predict step and save
         p = pf.predict(u)
-        for m in range(moments):
-            middle[m][i,j] = calc_moment(p, m+1)
+        for m in range(1, moments+1):
+            middle[m][i,j] = calc_moment(p, m)
 
         # clean measurements
         temp = z[ ~np.isnan(z).any(axis=1) ]
@@ -95,8 +95,8 @@ for i in range(times):
                 bad_time.append(i)
                 bad_step.append(j)
 
-        for m in range(moments):
-            end[m][i,j] = calc_moment(p, m+1)
+        for m in range(1, moments+1):
+            end[m][i,j] = calc_moment(p, m)
 
         bar.update(1)
     
@@ -106,5 +106,6 @@ for i in range(times):
     # plt.legend()
     # plt.show()
     
-with open(f'exact_data_{moment}.pkl', 'rb') as handle:
-    pickle.dump([start, middle, end], handle, protocol=pickle.HIGHEST_PROTOCOL)
+everything = {"start": start, "middle": middle, "end": end, "zs": all_z, "us": all_u, "xs": all_x}
+with open(f'exact_data_{moments}.pkl', 'wb') as handle:
+    pickle.dump(everything, handle, protocol=pickle.HIGHEST_PROTOCOL)

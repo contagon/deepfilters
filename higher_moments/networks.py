@@ -159,10 +159,45 @@ class Network(nn.Module):
 
     def forward(self, x, norm_out=True):
         #do some fancy stuff to make sure it's symmetric in the end
-        x = self.net(x)
+        x = self.net(self.norm_in(x))
         if norm_out:
             x = self.norm_out(x)
         return x
+
+class ResNetwork(Network):
+    def __init__(self, input_size, output_size, hidden_size, n_layers, input_data, output_data):
+        super().__init__()
+        self.input_size = input_size
+        self.output_size = output_size
+        self.hidden_size = hidden_size
+        self.n_layers = n_layers
+
+        self.act = nn.ReLU
+        self.in_layer = nn.Linear(self.input_size, self.hidden_size)
+        self.layers = []
+        for i in range(n_layers//2):
+            self.layers.append([ nn.Linear(self.hidden_size, self.hidden_size) ])
+        self.out_layer = nn.Linear(self.hidden_size, self.output_size)
+
+        self.norm_in = Normalize(input_data)
+        self.norm_out = Normalize(output_data)
+
+    def forward(self, x, norm_out=True):
+        # normalize and do first layer
+        x = self.norm_in(x)
+        x = self.act( self.in_layer(x) )
+
+        #pass through residual layers
+        for layer in self.layers:
+            temp = self.act( layer[0](x) )
+            x = self.act( x + layer[1]( temp ))
+
+        #output and normalize if asked for
+        x = self.out_layer(x)
+        if norm_out:
+            x = self.norm_out(x)
+        return x
+
 
 if __name__ == "__main__":
     test = OdometryData("exact_data_4.pkl")

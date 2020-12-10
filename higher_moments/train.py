@@ -127,7 +127,7 @@ def train_all(data, pnn, unn, lr, epochs, plot=True, batch_size=100, teacher_for
     OutNorm = Normalize(outputs)
 
     norm = torch.ones(34).cuda()
-    norm[:3] = 1.5
+    norm[:3] = 2
     objective = nn.L1Loss(reduction='none').cuda()   
     params = list(pnn.parameters()) + list(unn.parameters())
     opt = optim.Adam(params, lr=lr)
@@ -233,8 +233,8 @@ def main(filename):
         unn.load_state_dict(models['unn'])
 
     # save networks
-    # train_all(data, pnn, unn, 1e-3, 1, batch_size=200, teacher_forcing=1)
-    # train_all(data, pnn, unn, 1e-3, 1, batch_size=200, teacher_forcing=0.5)
+    train_all(data, pnn, unn, 1e-3, 1, batch_size=200, teacher_forcing=1)
+    train_all(data, pnn, unn, 1e-3, 2, batch_size=200, teacher_forcing=0.5)
     train_all(data, pnn, unn, 1e-3, 3, batch_size=200, teacher_forcing=0)
     
     torch.save({"pnn": pnn.state_dict(),

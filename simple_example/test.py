@@ -13,7 +13,7 @@ data = OdometryData("odometry_particle_shifted.npz", split=8000)
 # load models in
 all = slice(None,None)
 p_sigma = Sigma(3, 3, 64, 12, *data.train_predict_sigma(all)).cuda().eval()
-u_mu = UpdateMu(3, 2, 3, 64, 6, *data.train_update_mu(all)).cuda().eval()
+u_mu = UpdateMu(3, 2, 3, 64, 12, *data.train_update_mu(all)).cuda().eval()
 u_sigma = Sigma(3, 2, 64, 12, *data.train_update_sigma(all)).cuda().eval()
 # restore weights
 models = torch.load(sys.argv[1])
@@ -25,11 +25,13 @@ sig_train, innov_train, y_train = data.train_update_sigma(n)
 y_model = sig_train.clone()
 for i in range(innov_train.shape[1]):
     mask = ~torch.isnan(innov_train[:,i,:]).byte().any(axis=1).bool().detach()
-    y_model[mask] = u_sigma(sig_train[mask], innov_train[:,i,:][mask], norm_out=False)
+    sig_train[mask] = u_sigma(sig_train[mask], innov_train[:,i,:][mask], norm_out=False)
+y_model = sig_train.clone()
 
-print("OG", sig_train[10])
-print("Expected", y_train[10])
-print("Got", y_model[10])
+i = 45
+print("OG", sig_train[i])
+print("Expected", y_train[i])
+print("Got", y_model[i])
 
 s_pf = y_train.cpu().detach().numpy()
 s_nn = y_model.cpu().detach().numpy()

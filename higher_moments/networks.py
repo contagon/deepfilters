@@ -164,7 +164,7 @@ class Network(nn.Module):
             x = self.norm_out(x)
         return x
 
-class ResNetwork(Network):
+class ResNetwork(nn.Module):
     def __init__(self, input_size, output_size, hidden_size, n_layers, input_data, output_data):
         super().__init__()
         self.input_size = input_size
@@ -172,15 +172,23 @@ class ResNetwork(Network):
         self.hidden_size = hidden_size
         self.n_layers = n_layers
 
-        self.act = nn.ReLU
+        self.act = nn.ReLU()
         self.in_layer = nn.Linear(self.input_size, self.hidden_size)
         self.layers = []
         for i in range(n_layers//2):
-            self.layers.append([ nn.Linear(self.hidden_size, self.hidden_size) ])
+            temp = nn.ModuleList([nn.Linear(self.hidden_size, self.hidden_size), nn.Linear(self.hidden_size, self.hidden_size)])
+            self.layers.append(temp)
+        self.layers = nn.ModuleList(self.layers)
         self.out_layer = nn.Linear(self.hidden_size, self.output_size)
 
         self.norm_in = Normalize(input_data)
         self.norm_out = Normalize(output_data)
+
+        # def init_weights(m):
+        #     if type(m) == nn.Linear:
+        #         torch.nn.init.kaiming_uniform_(m.weight)
+        #         m.bias.data.fill_(0.0)
+        # self.apply(init_weights)
 
     def forward(self, x, norm_out=True):
         # normalize and do first layer

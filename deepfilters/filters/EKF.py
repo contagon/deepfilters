@@ -50,9 +50,9 @@ class ExtendKalmanFilter(BayesianFilter):
         zbar = self.sys.h(self.mu, *args)
         #update
         K = self.sigma@H.T@inv( H@self.sigma@H.T + self.sys.cov_z )
-        # temp = np.unwrap([z[1], zbar[1]])
-        # z[1] = temp[0]
-        # zbar[1] = temp[1]
+        temp = np.unwrap([z[1], zbar[1]])
+        z[1] = temp[0]
+        zbar[1] = temp[1]
         self.mus[-1] = self.mu + K@(z - zbar)
         self.sigmas[-1] = (np.eye(self.sys.n) - K@H)@self.sigma
 

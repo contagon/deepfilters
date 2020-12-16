@@ -4,3 +4,6 @@
 *.egg-info/**
 *.npz
 *.mat
+
+higher_moments/exact_data_4.pkl
+higher_moments/unknown_data_4.pkl

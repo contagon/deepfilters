@@ -7,16 +7,17 @@ from networks import *
 import sys
 
 # load data
-idx = 9400
+idx = 9010
 data = OdometryData("exact_data_4.pkl", split=8000)
+# data = OdometryData("unknown_data_4.pkl", split=8000)
 
 # load models in
 all = slice(None,None)
 n_m = 3+6+10+15
-pnn = Network(n_m, n_m-3, 64, 12, *data.train_predict(all)).cuda().eval()
+pnn = ResNetwork(n_m, n_m-3, 64, 24, *data.train_predict(all)).cuda().eval()
 x1, x2, y = data.train_update(all)
 x = torch.cat([(x1[:,:,0,:]+x1[:,:,1,:])/2, x2], 2)
-unn = Network(n_m-3+2, n_m, 64, 12, x, y).cuda().eval()
+unn = ResNetwork(n_m-3+2, n_m, 64, 24, x, y).cuda().eval()
 
 #restore weights
 models = torch.load(sys.argv[1])
@@ -45,7 +46,6 @@ for _, u, z, l, y in zip(x_train, us, zs, ls, y_train):
         while (v[:,1] < -np.pi).any():
             v[ v[:,1] < -np.pi ] += 2*np.pi
         vs.append(v)
-
     if vs != []:
         vs = torch.stack(vs, 1)
 

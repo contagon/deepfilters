@@ -14,7 +14,7 @@ torch.set_printoptions(sci_mode=False)
 def train_predict(data, model, lr, epochs, plot=True):
     norm = torch.ones(31).cuda()
     norm[0] = 1.5
-    opt = optim.Adam(model.parameters(), lr=lr)
+    opt = optim.Adam(model.parameters(), lr=lr, weight_decay=0)
     objective = nn.L1Loss().cuda()
 
     val_loss = []
@@ -64,7 +64,7 @@ def train_predict(data, model, lr, epochs, plot=True):
 def train_update(data, model, lr, epochs, plot=True):
     norm = torch.ones(34).cuda()
     # norm[0:3] = 1.5
-    opt = optim.Adam(model.parameters(), lr=lr)
+    opt = optim.Adam(model.parameters(), lr=lr, weight_decay=0)
     objective = nn.L1Loss().cuda()
 
     val_loss = []
@@ -118,7 +118,7 @@ def train_update(data, model, lr, epochs, plot=True):
         fig, ax = plt.subplots()
         ax.semilogy(np.arange(len(train_loss)), train_loss)
         ax.semilogy(np.arange(len(val_loss)), val_loss)
-        ax.set_title("Predict Loss")
+        ax.set_title("Update Loss")
         plt.draw()
         plt.pause(0.001)
 
@@ -130,7 +130,7 @@ def train_all(data, pnn, unn, lr, epochs, plot=True, batch_size=100, teacher_for
     norm[:3] = 2
     objective = nn.L1Loss(reduction='none').cuda()   
     params = list(pnn.parameters()) + list(unn.parameters())
-    opt = optim.Adam(params, lr=lr)
+    opt = optim.Adam(params, lr=lr, weight_decay=0)
 
     train_loss = []
     t = tqdm(total=epochs*data.split/batch_size, leave=True, position=0)
@@ -186,6 +186,8 @@ def train_all(data, pnn, unn, lr, epochs, plot=True, batch_size=100, teacher_for
                     temp[mask] += unn( torch.cat([v, moment[:,3:]], 1)[mask], norm_out=False)
                 moment += temp
 
+                if (torch.abs(temp) > 1000).any():
+                    print( (torch.abs(temp) > 1000).nonzero() )
                 # add to loss
                 loss += objective(OutNorm(moment), OutNorm(y)).mean(axis=1)
 
@@ -209,21 +211,22 @@ def train_all(data, pnn, unn, lr, epochs, plot=True, batch_size=100, teacher_for
 def main(filename):
     # we'll train each network individually for a while first
     # Then we'll work on training as a sequence to help it stand on it's own
+    # data = OdometryData("unknown_data_4.pkl", split=9000)
     data = OdometryData("exact_data_4.pkl", split=9000)
-    all = slice(None,None)
+    all = slice(None)
 
     # make models
     n_m = 3+6+10+15
-    pnn = Network(n_m, n_m-3, 64, 12, *data.train_predict(all)).cuda()
+    pnn = ResNetwork(n_m, n_m-3, 64, 12, *data.train_predict(all)).cuda()
     x1, x2, y = data.train_update(all)
     x = torch.cat([(x1[:,:,0,:]+x1[:,:,1,:])/2, x2], 2)
-    unn = Network(n_m-3+2, n_m, 64, 12, x, y).cuda()
+    unn = ResNetwork(n_m-3+2, n_m, 64, 12, x, y).cuda()
 
-    load = True
+    load = False
     if not load:
         # train models
-        train_predict(data, pnn, 1e-3, 5)
-        train_update(data, unn, 1e-3, 5)
+        train_predict(data, pnn, 1e-3, 2)
+        train_update(data, unn, 1e-3, 2)
         torch.save({"pnn": pnn.state_dict(),
                     "unn": unn.state_dict()}, filename+"temp")
     else:
@@ -233,9 +236,9 @@ def main(filename):
         unn.load_state_dict(models['unn'])
 
     # save networks
-    train_all(data, pnn, unn, 1e-3, 1, batch_size=200, teacher_forcing=1)
-    train_all(data, pnn, unn, 1e-3, 2, batch_size=200, teacher_forcing=0.5)
-    train_all(data, pnn, unn, 1e-3, 3, batch_size=200, teacher_forcing=0)
+    train_all(data, pnn, unn, 1e-3, 2, batch_size=200, teacher_forcing=1)
+    train_all(data, pnn, unn, 1e-3, 1, batch_size=200, teacher_forcing=0.5)
+    train_all(data, pnn, unn, 1e-3, 2, batch_size=200, teacher_forcing=0)
     
     torch.save({"pnn": pnn.state_dict(),
                     "unn": unn.state_dict()}, filename)
